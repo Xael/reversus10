@@ -21,7 +21,7 @@ function handleCardClick(cardElement) {
     const card = player.hand.find(c => c.id === cardId);
 
     if (card) {
-        // Prevent selecting a value card if one has already been played
+        // Prevent selecting a second value card if one has already been played
         if (card.type === 'value' && player.playedValueCardThisTurn) {
             return;
         }
@@ -242,7 +242,14 @@ export function initializeUiHandlers() {
             dom.targetModal.classList.remove('hidden');
             dom.targetModalCardName.textContent = card.name;
             
-            const targetablePlayers = gameState.playerIdsInGame;
+            let targetablePlayers = gameState.playerIdsInGame;
+            // The "Pula" card can now target any player, including the caster.
+            if (card.name !== 'Pula') {
+                 // For other cards, remove self from target list unless it's a beneficial card in a team game, etc.
+                 // This logic can be refined, but for now, this is a safe default.
+                 // targetablePlayers = gameState.playerIdsInGame.filter(id => id !== 'player-1');
+            }
+
 
             dom.targetPlayerButtonsEl.innerHTML = targetablePlayers.map(id => {
                 const playerObj = gameState.players[id];
@@ -481,7 +488,8 @@ export function initializeUiHandlers() {
     dom.debugButton.addEventListener('click', () => {
         const { gameState } = getState();
         // Prevent saving in non-story mode or during unsafe game phases
-        dom.menuSaveGameButton.disabled = !gameState?.isStoryMode || gameState.gamePhase !== 'playing';
+        const isUnsafePhase = gameState.gamePhase !== 'playing' && gameState.gamePhase !== 'paused';
+        dom.menuSaveGameButton.disabled = !gameState?.isStoryMode || isUnsafePhase;
         dom.gameMenuModal.classList.remove('hidden');
     });
     
@@ -500,7 +508,7 @@ export function initializeUiHandlers() {
         dom.exitGameConfirmModal.classList.remove('hidden');
     });
     dom.exitGameYesButton.addEventListener('click', () => {
-        saveLoad.deleteSavedGame();
+        // This was deleting the save file on exit.
         location.reload(); // Reloads the page to go back to splash
     });
     dom.exitGameNoButton.addEventListener('click', () => dom.exitGameConfirmModal.classList.add('hidden'));
@@ -551,6 +559,7 @@ export function initializeUiHandlers() {
         
         switch(battle) {
             case 'tutorial_necroverso':
+            case 'necroverso': // Added alias for old save files
                 const lines = won ? config.AI_DIALOGUE.necroverso_tutorial.losing : config.AI_DIALOGUE.necroverso_tutorial.winning;
                 ui.showGameOver(lines[Math.floor(Math.random() * lines.length)], won ? "Você Venceu!" : "Você Perdeu!", false);
                 achievements.grantAchievement(won ? 'first_win' : 'first_defeat');
@@ -598,11 +607,15 @@ export function initializeUiHandlers() {
         }
     
         if (nextNodeId) {
+            // After winning, hide restart and continue story flow
+            document.body.dataset.storyContinuation = 'true';
             setTimeout(() => {
+                delete document.body.dataset.storyContinuation;
                 dom.gameOverModal.classList.add('hidden');
+                // Return control to story manager
                 dom.storyModeModalEl.classList.remove('hidden');
                 story.renderStoryNode(nextNodeId);
-            }, 3000);
+            }, 4000);
         }
     });
 }

@@ -70,6 +70,17 @@ export const loadGameState = () => {
     dom.debugButton.classList.remove('hidden');
     dom.boardEl.classList.toggle('inverted', gameState.isFinalBoss);
 
+    // BUG FIX: Ensure score boxes are visible when loading a game
+    if (dom.leftScoreBox && dom.rightScoreBox) {
+        if (gameState.isInversusMode) {
+            dom.leftScoreBox.classList.add('hidden');
+            dom.rightScoreBox.classList.add('hidden');
+        } else {
+            dom.leftScoreBox.classList.remove('hidden');
+            dom.rightScoreBox.classList.remove('hidden');
+        }
+    }
+
     const player1Container = document.getElementById('player-1-area-container');
     const opponentsContainer = document.getElementById('opponent-zones-container');
     const createPlayerAreaHTML = (id) => `<div class="player-area" id="player-area-${id}"></div>`;
