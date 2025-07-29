@@ -7,7 +7,7 @@ import * as story from './story.js';
 import * as saveLoad from './save-load.js';
 import * as achievements from './achievements.js';
 import { updateLog } from './utils.js';
-import { POSITIVE_EFFECTS, NEGATIVE_EFFECTS, PLAYER_CONFIG } from './config.js';
+import * as config from './config.js';
 import { shatterImage } from './animations.js';
 
 function handleCardClick(cardElement) {
@@ -214,7 +214,7 @@ export function initializeUiHandlers() {
             if (effect) {
                 dom.fieldEffectInfoTitle.textContent = `Efeito Ativo em ${gameState.players[playerId].name}`;
                 dom.fieldEffectInfoName.textContent = effect.name;
-                dom.fieldEffectInfoDescription.textContent = POSITIVE_EFFECTS[effect.name] || NEGATIVE_EFFECTS[effect.name];
+                dom.fieldEffectInfoDescription.textContent = config.POSITIVE_EFFECTS[effect.name] || config.NEGATIVE_EFFECTS[effect.name];
                 dom.fieldEffectInfoModal.classList.remove('hidden');
             }
         } else if (cardElement) {
@@ -238,10 +238,7 @@ export function initializeUiHandlers() {
             dom.targetModal.classList.remove('hidden');
             dom.targetModalCardName.textContent = card.name;
             
-            let targetablePlayers = gameState.playerIdsInGame;
-            if (card.name === 'Pula') {
-                targetablePlayers = gameState.playerIdsInGame.filter(id => id !== 'player-1');
-            }
+            const targetablePlayers = gameState.playerIdsInGame;
 
             dom.targetPlayerButtonsEl.innerHTML = targetablePlayers.map(id => {
                 const playerObj = gameState.players[id];
@@ -395,7 +392,7 @@ export function initializeUiHandlers() {
     dom.pvpUsernameSubmit.addEventListener('click', () => {
         const username = dom.pvpUsernameInput.value;
         if(username.trim()){
-            PLAYER_CONFIG['player-1'].name = username;
+            config.PLAYER_CONFIG['player-1'].name = username;
             dom.pvpUsernameModal.classList.add('hidden');
             const roomId = getState().currentEnteringRoomId;
             dom.pvpLobbyModal.classList.remove('hidden');
@@ -453,7 +450,7 @@ export function initializeUiHandlers() {
     dom.lobbyChatSendButton.addEventListener('click', () => {
         const message = dom.lobbyChatInput.value;
         if (message.trim()) {
-            ui.addLobbyChatMessage(PLAYER_CONFIG['player-1'].name, message);
+            ui.addLobbyChatMessage(config.PLAYER_CONFIG['player-1'].name, message);
             dom.lobbyChatInput.value = '';
         }
     });
@@ -516,9 +513,31 @@ export function initializeUiHandlers() {
         const { battle, won, reason } = e.detail;
         const { gameState, storyState } = getState();
         if(gameState) gameState.gamePhase = 'game_over';
-
-        document.body.dataset.storyContinuation = 'true';
-
+    
+        // Battles where losing means game over and return to menu
+        const hardFailBattles = ['contravox', 'reversum', 'necroverso_king', 'necroverso_final'];
+    
+        if (!won && hardFailBattles.includes(battle)) {
+            let loseMessage = "Você Perdeu!"; // Default loss message
+            if (battle === 'necroverso_final') {
+                if (reason === 'collision') loseMessage = "A escuridão te alcançou...";
+                else if (reason === 'black_hole') loseMessage = "Você caiu em um buraco negro e foi derrotado.";
+                else if (reason === 'time') loseMessage = "O tempo acabou...";
+                else loseMessage = "A escuridão consome tudo...";
+            }
+    
+            ui.showGameOver(loseMessage, "Você Perdeu!");
+            achievements.grantAchievement('first_defeat');
+            
+            setTimeout(() => {
+                dom.gameOverModal.classList.add('hidden');
+                ui.showSplashScreen(); // Go back to main menu
+            }, 3000);
+            
+            return; // Stop execution, do not progress story
+        }
+    
+        // If we're here, it's either a win, or a loss in a "soft-fail" battle
         let nextNodeId = null;
         
         switch(battle) {
@@ -529,11 +548,9 @@ export function initializeUiHandlers() {
                 nextNodeId = 'post_tutorial';
                 break;
             case 'contravox':
-                 ui.showGameOver(won ? "!otiderca oãN" : "!recnev iov euq aibas uE", won ? "Você Venceu!" : "Você Perdeu!");
-                 achievements.grantAchievement(won ? 'contravox_win' : 'first_defeat');
-                 if (won) {
-                    await shatterImage(document.getElementById('story-character-image')); // Shatter effect on win
-                 }
+                 ui.showGameOver("!otiderca oãN", "Você Venceu!");
+                 achievements.grantAchievement('contravox_win');
+                 await shatterImage(document.getElementById('story-character-image'));
                  nextNodeId = 'post_contravox_victory';
                  break;
             case 'versatrix':
@@ -547,40 +564,33 @@ export function initializeUiHandlers() {
                 nextNodeId = won ? 'post_versatrix_victory' : 'post_versatrix_defeat';
                 break;
             case 'reversum':
-                 ui.showGameOver(won ? "...INTERESSANTE" : "FÁCIL DEMAIS", won ? "Você Venceu!" : "Você Perdeu!");
-                 achievements.grantAchievement(won ? 'reversum_win' : 'first_defeat');
+                 ui.showGameOver("...INTERESSANTE", "Você Venceu!");
+                 achievements.grantAchievement('reversum_win');
                  nextNodeId = 'post_reversum_victory';
                  break;
             case 'necroverso_king':
-                ui.showGameOver(won ? "Impossível!" : "A vitória é minha!", won ? "Você Venceu!" : "Você Perdeu!");
-                achievements.grantAchievement(won ? 'true_end_beta' : 'first_defeat');
+                ui.showGameOver("Impossível!", "Você Venceu!");
+                achievements.grantAchievement('true_end_beta');
                 nextNodeId = 'post_necroverso_king_victory';
                 break;
             case 'necroverso_final':
-                let message = "A escuridão consome tudo...";
-                if (reason === 'collision') message = "A escuridão te alcançou...";
-                else if (reason === 'black_hole') message = "Você caiu em um buraco negro e foi derrotado.";
-                else if (reason === 'time') message = "O tempo acabou...";
-                
+                // Loss is handled above, this only runs on win
                 if (won) {
                     achievements.grantAchievement('true_end_final');
                     await story.playEndgameSequence();
-                } else {
-                    achievements.grantAchievement('first_defeat');
-                    ui.showGameOver(message, "Você Perdeu!");
                 }
                 // No next node, game ends here
                 break;
         }
-
-        setTimeout(() => {
-            dom.gameOverModal.classList.add('hidden');
-            if(nextNodeId) {
+    
+        // If a next story node is set, proceed after a delay
+        if (nextNodeId) {
+            setTimeout(() => {
+                dom.gameOverModal.classList.add('hidden');
                 dom.storyModeModalEl.classList.remove('hidden');
                 story.renderStoryNode(nextNodeId);
-            }
-             delete document.body.dataset.storyContinuation;
-        }, 3000);
+            }, 3000);
+        }
     });
     
     // --- Developer Hotkeys ---

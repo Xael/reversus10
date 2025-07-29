@@ -6,12 +6,12 @@ import { shatterImage } from './animations.js';
 const storyDialogue = {
     'start_necroverso': {
         character: 'Necroverso', image: 'necroverso.png',
-        text: 'Você está no Inversum... e eu sou o Necroverso. Se quiser voltar ao seu mundo deverá desafiar os soberanos deste lugar: Contravox, Versatrix e Reversum.',
-        options: [{ text: 'Desafiar?', next: 'pre_tutorial_prompt' }]
+        text: 'Você está no Inversun... Eu sou o Necroverso. Se quiser voltar, deve desafiar os soberanos deste lugar: Contravox, Versatrix e Reversum.',
+        options: [{ text: 'Como os desafio?', next: 'pre_tutorial_prompt' }]
     },
     'pre_tutorial_prompt': {
         character: 'Necroverso', image: 'necroverso.png',
-        text: 'Sim, eles jogam um jogo de cartas e tabuleiro. Quer que eu te ensine o básico numa partida rápida?',
+        text: 'Eles jogam um jogo de cartas e tabuleiro. Quer que eu te ensine o básico em uma partida rápida?',
         options: [
             { text: 'Sim, por favor.', next: 'tutorial_explain_1' },
             { text: 'Não, eu me viro.', next: 'tutorial_skip' }
@@ -144,7 +144,7 @@ const storyDialogue = {
     },
     'post_reversum_victory': {
         character: 'Necroverso', image: 'necroversorevelado.png',
-        text: "Finalmente com eles derrotados o Inversum me pertence.",
+        text: "Finalmente com eles derrotados o Invesun me pertence.",
         options: [{ text: "Certo... e nosso acordo?", next: 'final_confrontation_1' }]
     },
     'final_confrontation_1': {

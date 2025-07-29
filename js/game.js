@@ -1196,42 +1196,54 @@ const resolveRound = async () => {
     const winners = [];
     const losers = [];
 
-    // Correctly determine winners based on game mode
+    // --- Determine Round Winners ---
     if (gameState.storyBattleType === '1v3_king') {
         const p1Score = scores['player-1'];
         const necroScore = ['player-2', 'player-3', 'player-4'].reduce((sum, id) => sum + (scores[id] || 0), 0);
         updateLog(`Pontuação da Rodada - Você: ${p1Score}, Necroverso (Total): ${necroScore}.`);
-        if (p1Score > necroScore) { winners.push('player-1'); losers.push('player-2', 'player-3', 'player-4'); } 
-        else if (necroScore > p1Score) { winners.push('player-2', 'player-3', 'player-4'); losers.push('player-1'); }
-        else { // TIE condition
-            updateLog("Empate! Todos avançam!");
-            winners.push('player-1', 'player-2', 'player-3', 'player-4');
-        }
-    } else if (gameState.isFinalBoss) {
+        if (p1Score > necroScore) { winners.push('player-1'); } 
+        else if (necroScore > p1Score) { winners.push('player-2', 'player-3', 'player-4'); }
+        else { updateLog("Empate! Todos avançam!"); winners.push(...playerIds); }
+    } else if (gameState.isFinalBoss) { // Handles 2v2 final battle
         const teamPlayerScore = (scores['player-1'] || 0) + (scores['player-4'] || 0);
         const teamNecroScore = (scores['player-2'] || 0) + (scores['player-3'] || 0);
         updateLog(`Pontuação da Rodada - Você/Versatrix: ${teamPlayerScore}, Necroverso: ${teamNecroScore}.`);
-        if (teamPlayerScore > teamNecroScore) { winners.push('player-1', 'player-4'); losers.push('player-2', 'player-3'); } 
-        else if (teamNecroScore > teamPlayerScore) { winners.push('player-2', 'player-3'); losers.push('player-1', 'player-4'); }
+        if (teamPlayerScore > teamNecroScore) { winners.push('player-1', 'player-4'); } 
+        else if (teamNecroScore > teamPlayerScore) { winners.push('player-2', 'player-3'); }
     } else if (gameState.gameMode === 'duo') {
-        const teamAScore = config.TEAM_A.reduce((sum, id) => sum + (scores[id] || 0), 0);
-        const teamBScore = config.TEAM_B.reduce((sum, id) => sum + (scores[id] || 0), 0);
+        const teamAScore = config.TEAM_A.filter(id => playerIds.includes(id)).reduce((sum, id) => sum + (scores[id] || 0), 0);
+        const teamBScore = config.TEAM_B.filter(id => playerIds.includes(id)).reduce((sum, id) => sum + (scores[id] || 0), 0);
         updateLog(`Pontuação Equipes - Azul/Verde: ${teamAScore}, Vermelho/Amarelo: ${teamBScore}.`);
-        if (teamAScore > teamBScore) { winners.push(...config.TEAM_A.filter(id => playerIds.includes(id))); losers.push(...config.TEAM_B.filter(id => playerIds.includes(id))); } 
-        else if (teamBScore > teamAScore) { winners.push(...config.TEAM_B.filter(id => playerIds.includes(id))); losers.push(...config.TEAM_A.filter(id => playerIds.includes(id))); }
-    } else { // solo or inversus mode
+        if (teamAScore > teamBScore) { winners.push(...config.TEAM_A.filter(id => playerIds.includes(id))); }
+        else if (teamBScore > teamAScore) { winners.push(...config.TEAM_B.filter(id => playerIds.includes(id))); }
+    } else { // Default for solo modes (including 1v1 story) and Inversus
         const activePlayerIds = playerIds.filter(id => !gameState.players[id].isEliminated);
         if (activePlayerIds.length > 0) {
             const maxScore = Math.max(...activePlayerIds.map(id => scores[id]));
-            // Correctly identify all players who achieved the maximum score as winners
             const potentialWinners = activePlayerIds.filter(id => scores[id] === maxScore);
-            winners.push(...potentialWinners);
+            if (potentialWinners.length < activePlayerIds.length) { // Avoid adding everyone on a total tie
+                winners.push(...potentialWinners);
+            }
         }
     }
     
-    // Determine losers for all modes based on who didn't win
     playerIds.forEach(id => { if (!winners.includes(id)) losers.push(id); });
 
+    // --- Final Boss heart logic ---
+    if (gameState.isFinalBoss && winners.includes('player-1')) {
+        gameState.necroversoHearts--;
+        updateLog(`Necroverso perdeu um coração! Restam: ${gameState.necroversoHearts}`);
+        playSoundEffect('desce');
+        document.body.classList.add('screen-shaking');
+        setTimeout(() => document.body.classList.remove('screen-shaking'), 400);
+
+        if (gameState.necroversoHearts <= 0) {
+            document.dispatchEvent(new CustomEvent('storyWinLoss', { detail: { battle: 'necroverso_final', won: true } }));
+            return; // Game over
+        }
+    }
+
+    // Determine next player
     let nextPlayerId = null;
     if (winners.length > 0) {
         if (winners.length === 1) {
@@ -1252,10 +1264,7 @@ const resolveRound = async () => {
     if (gameState.isInversusMode) {
         losers.forEach(id => {
             const p = gameState.players[id];
-            if (p.hearts > 0) {
-                p.hearts--;
-                updateLog(`${p.name} perdeu um coração! Restam: ${p.hearts}`);
-            }
+            if (p.hearts > 0) { p.hearts--; updateLog(`${p.name} perdeu um coração! Restam: ${p.hearts}`); }
         });
         await showRoundSummaryModal(winners, scores);
         await endGameCheck();
@@ -1571,9 +1580,9 @@ const endGameCheck = async () => {
             grantAchievement('inversus_win');
             return;
         }
-    }
-
-    if (gameState.isStoryMode) {
+    } else if (gameState.isStoryMode) {
+        // The final boss has a unique win condition (hearts), handled in resolveRound.
+        // This check prevents it from falling through to position-based checks.
         if (gameState.isFinalBoss) {
             if (gameState.gamePhase !== 'game_over') {
                  await startNewRound();
@@ -1581,35 +1590,28 @@ const endGameCheck = async () => {
             return;
         }
         
-        const getStoryWinner = () => {
-            if (gameState.storyBattleType === '1v3_king') {
-                const p1Pos = gameState.players['player-1'].position;
-                 const opponentReachedEnd = ['player-2', 'player-3', 'player-4']
-                    .some(id => gameState.players[id] && gameState.players[id].position >= config.WINNING_POSITION);
+        // --- Position-based win checks for all other story battles ---
+        let winner = null;
+        const player1Won = gameState.players['player-1'].position >= config.WINNING_POSITION;
+        
+        // Check if any opponent has reached the end. This is robust for 1v1, 1v2, 1v3, etc.
+        const opponentWon = playerIds
+            .filter(id => id !== 'player-1')
+            .some(id => gameState.players[id] && gameState.players[id].position >= config.WINNING_POSITION);
 
-                if (p1Pos >= config.WINNING_POSITION) return 'player';
-                if (opponentReachedEnd) return 'opponent';
-                return null;
-            }
-            
-            const p1Pos = gameState.players['player-1'].position;
-            const opponentId = playerIds.find(id => id !== 'player-1');
-            const opponentPos = opponentId ? gameState.players[opponentId].position : -1;
-            if (p1Pos >= config.WINNING_POSITION) return 'player';
-            if (opponentPos >= config.WINNING_POSITION) return 'opponent';
-            
-            return null; // No winner by position yet
-        };
-
-        const winner = getStoryWinner();
-
-        if (winner) {
-            document.dispatchEvent(new CustomEvent('storyWinLoss', { detail: { battle: gameState.currentStoryBattle, won: (winner === 'player') } }));
-            return;
+        if (player1Won) {
+            winner = 'player';
+        } else if (opponentWon) {
+            winner = 'opponent';
         }
 
-    } else {
-        // Standard Game Over Check
+        if (winner) {
+            // Dispatch event to handle story progression and modals
+            document.dispatchEvent(new CustomEvent('storyWinLoss', { detail: { battle: gameState.currentStoryBattle, won: (winner === 'player') } }));
+            return; // Game over, stop processing
+        }
+        
+    } else { // Standard (non-story) game modes
         let gameOver = false;
         let winnerMsg = "";
     
@@ -1619,7 +1621,7 @@ const endGameCheck = async () => {
                 gameOver = true;
                 winnerMsg = `Fim de Jogo! ${winners.map(w => w.name).join(' e ')} venceu!`;
             }
-        } else if (gameState.gameMode === 'duo') { // Duo
+        } else if (gameState.gameMode === 'duo') {
             const teamA_Win = config.TEAM_A.filter(id => playerIds.includes(id)).every(id => gameState.players[id].position >= config.WINNING_POSITION);
             const teamB_Win = config.TEAM_B.filter(id => playerIds.includes(id)).every(id => gameState.players[id].position >= config.WINNING_POSITION);
     
@@ -1644,7 +1646,9 @@ const endGameCheck = async () => {
     }
 
     // If no one has won yet in any mode, start the next round.
-    await startNewRound();
+    if (gameState.gamePhase !== 'game_over') {
+        await startNewRound();
+    }
 };
 
 

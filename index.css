@@ -251,10 +251,16 @@ body.screen-shaking {
 
 .hidden { display: none !important; }
 
+#scalable-container {
+    width: 100vw;
+    height: 100vh;
+    transform: scale(0.9);
+    transition: transform 0.5s ease-in-out;
+}
+
 /* INVERSUS TOTAL SCREEN FLIP */
 #scalable-container.inversus-total-active {
-    transform: rotate(180deg);
-    transition: transform 0.5s ease-in-out;
+    transform: rotate(180deg) scale(0.9);
 }
 
 /* --- NEW APP LAYOUT --- */
