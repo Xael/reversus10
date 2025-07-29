@@ -6,12 +6,12 @@ import { shatterImage } from './animations.js';
 const storyDialogue = {
     'start_necroverso': {
         character: 'Necroverso', image: 'necroverso.png',
-        text: 'Você está no Inversun... Eu sou o Necroverso. Se quiser voltar, deve desafiar os soberanos deste lugar: Contravox, Versatrix e Reversum.',
-        options: [{ text: 'Como os desafio?', next: 'pre_tutorial_prompt' }]
+        text: 'Você está no Inversum... Eu sou o Necroverso. Se quiser voltar ao seu mundo deverá vencer os soberanos deste lugar: Contravox, Versatrix e Reversum.',
+        options: [{ text: 'Vencer?', next: 'pre_tutorial_prompt' }]
     },
     'pre_tutorial_prompt': {
         character: 'Necroverso', image: 'necroverso.png',
-        text: 'Eles jogam um jogo de cartas e tabuleiro. Quer que eu te ensine o básico em uma partida rápida?',
+        text: 'Eles jogam um jogo de cartas e tabuleiro chamado Reversus. Quer que eu te ensine o básico em uma partida?',
         options: [
             { text: 'Sim, por favor.', next: 'tutorial_explain_1' },
             { text: 'Não, eu me viro.', next: 'tutorial_skip' }
@@ -29,12 +29,12 @@ const storyDialogue = {
     },
     'tutorial_explain_2': {
         character: 'Necroverso', image: 'necroverso.png',
-        text: 'Sua pontuação é a soma de duas cartas de VALOR que você joga. Se tiver 2 ou mais cartas de valor, você DEVE jogar uma. Se tiver só uma, ela vira seu "Resto" e não pode ser jogada.',
+        text: 'Sua pontuação é a soma de duas cartas de VALOR que você joga. Se tiver 2 ou mais cartas de valor, você DEVE jogar uma. Se tiver só uma, ela não poderá ser jogada. O seu Resto será sua última carta de VALOR jogada na rodada...',
         next: 'tutorial_explain_3', isContinue: true
     },
     'tutorial_explain_3': {
         character: 'Necroverso', image: 'necroverso.png',
-        text: 'As cartas de EFEITO são o tempero. "Mais" e "Menos" usam o valor do seu "Resto" para aumentar ou diminuir sua pontuação. "Sobe" e "Desce" movem seu peão.',
+        text: 'As cartas de EFEITO pode mudar tudo! "Mais" e "Menos" usam o valor do seu "Resto" para aumentar ou diminuir sua pontuação. "Sobe" e "Desce" movem seu peão.',
         next: 'tutorial_explain_4', isContinue: true
     },
     'tutorial_explain_4': {
@@ -44,7 +44,7 @@ const storyDialogue = {
     },
     'tutorial_explain_5': {
         character: 'Necroverso', image: 'necroverso.png',
-        text: 'Chega de papo. Vamos jogar. Se vencer, a história continua. Se perder... a história também continua, mas eu vou rir de você.',
+        text: 'Chega de papo. Vamos jogar. Não se preocupe em vencer, apenas em aprender.',
         isEndStory: true,
         startGame: { battle: 'tutorial_necroverso' }
     },
@@ -88,14 +88,14 @@ const storyDialogue = {
             const { achievements } = getState();
             return achievements.has('versatrix_card_collected') 
                 ? "Gostou do meu presente?"
-                : "Caso me vença, te enviarei uma carta especial no meio das cartas que voam.";
+                : "Caso me vença, te enviarei uma carta especial...";
         },
         options: () => {
              const { achievements } = getState();
              return achievements.has('versatrix_card_collected')
                 ? [{ text: "Muito!", next: 'versatrix_end_game' }]
                 : [
-                    { text: "Sinto muito pelo seu irmão...", next: 'versatrix_sinto_muito' }, 
+                    { text: "Carta?...", next: 'versatrix_sinto_muito' }, 
                     { text: "Você é solteira?", next: 'versatrix_solteira' }
                   ];
         }
@@ -135,8 +135,8 @@ const storyDialogue = {
     },
     'start_reversum': {
         character: 'Reversum', image: 'reversum.png',
-        text: "Está cometendo um erro me desafiando...",
-        options: [{ text: "Errar é humano...", next: 'reversum_end' }, { text: "Só quero zerar o jogo...", next: 'reversum_end' }, { text: "Seto Kaiba?", next: 'reversum_end' }]
+        text: "CURVE-SE DIANTE DO SEU REI! EU SOU REX REVERSUM TOTIS",
+        options: [{ text: "Errar é humano...", next: 'reversum_end' }, { text: "Só quero zerar o jogo...", next: 'reversum_end' }, { text: "Leônidas?", next: 'reversum_end' }]
     },
     'reversum_end': {
         isEndStory: true,
@@ -144,7 +144,7 @@ const storyDialogue = {
     },
     'post_reversum_victory': {
         character: 'Necroverso', image: 'necroversorevelado.png',
-        text: "Finalmente com eles derrotados o Invesun me pertence.",
+        text: "Finalmente com eles derrotados o Inversum me pertence.",
         options: [{ text: "Certo... e nosso acordo?", next: 'final_confrontation_1' }]
     },
     'final_confrontation_1': {

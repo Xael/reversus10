@@ -20,31 +20,38 @@ export const animateNecroX = () => {
 
 /**
  * Creates and starts the falling animation for the secret Versatrix card on the splash screen.
+ * This now uses a chained timeout to create a more reliable loop.
  */
 const startVersatrixCardAnimation = () => {
     const { versatrixCardInterval } = getState();
+    // Clear any previously running interval to prevent duplicates
     if (versatrixCardInterval) clearInterval(versatrixCardInterval);
 
+    const fallDuration = 15000;
+    const pauseDuration = 10000;
+    const totalCycle = fallDuration + pauseDuration;
+
     const createCard = () => {
-        // Check if a card already exists to prevent duplicates
+        // Prevent creating a new card if one is already falling
         if (document.getElementById('secret-versatrix-card')) return;
         
         const card = document.createElement('div');
         card.id = 'secret-versatrix-card';
-        card.className = 'secret-versatrix-card';
         card.style.left = `${Math.random() * 80 + 10}vw`; // Avoid edges
         
         dom.splashAnimationContainerEl.appendChild(card);
         
-        // Remove the card after its animation finishes to allow a new one to spawn
+        // Remove the card after its animation finishes
         setTimeout(() => {
-            card.remove();
-        }, 25000); // Should match animation duration
+            if (card.parentElement) {
+                 card.remove();
+            }
+        }, fallDuration);
     };
 
-    // Create the first card immediately, then set interval for subsequent cards
+    // Create the first card immediately, then set an interval for subsequent cycles
     createCard();
-    const interval = setInterval(createCard, 10000);
+    const interval = setInterval(createCard, totalCycle);
     updateState('versatrixCardInterval', interval);
 };
 

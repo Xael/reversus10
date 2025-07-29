@@ -130,10 +130,10 @@
 
 @keyframes secret-fall {
     from {
-        transform: translateY(110vh);
+        transform: translateY(-20vh); /* Start from above the screen */
     }
     to {
-        transform: translateY(-10vh);
+        transform: translateY(120vh); /* End below the screen */
     }
 }
 
@@ -200,11 +200,11 @@
     to { transform: rotate(360deg); }
 }
 
-@keyframes toast-in-out {
-    0% { transform: translateX(-110%); }
-    15% { transform: translateX(0); }
-    85% { transform: translateX(0); }
-    100% { transform: translateX(-110%); }
+@keyframes toast-in-down-out {
+    0% { transform: translate(-50%, -150%); opacity: 0; }
+    15% { transform: translate(-50%, 0); opacity: 1; }
+    85% { transform: translate(-50%, 0); opacity: 1; }
+    100% { transform: translate(-50%, -150%); opacity: 0; }
 }
 
 @keyframes scroll-credits {
@@ -1113,7 +1113,7 @@ body.screen-shaking {
 }
 #secret-versatrix-card {
     position: absolute;
-    bottom: -150px;
+    top: -150px; /* Start off-screen top */
     pointer-events: all !important;
     cursor: pointer;
     z-index: 10;
@@ -1123,7 +1123,7 @@ body.screen-shaking {
     background-size: cover;
     border: 2px solid var(--accent-yellow);
     border-radius: 8px;
-    animation: secret-fall 25s linear, versatrix-pulse-glow 2s infinite ease-in-out;
+    animation: secret-fall 15s linear, versatrix-pulse-glow 2s infinite ease-in-out;
 }
 
 
@@ -1138,6 +1138,7 @@ body.screen-shaking {
     font-weight: 700;
     color: white;
     text-shadow: 0 0 10px var(--accent-yellow), 0 0 20px var(--accent-yellow);
+    animation: fade-in-out 1.5s forwards;
 }
 
 .effect-announcer-overlay {
@@ -1538,7 +1539,7 @@ body.screen-shaking {
 #achievement-unlocked-toast {
     position: fixed;
     top: 20px;
-    left: 20px;
+    left: 50%;
     z-index: 2500;
     background-color: var(--bg-panel);
     border: 1px solid var(--accent-yellow);
@@ -1551,8 +1552,8 @@ body.screen-shaking {
     font-size: 1.1rem;
     font-weight: 600;
     box-shadow: 0 5px 15px rgba(0,0,0,0.4);
-    transform: translateX(-150%);
-    animation: toast-in-out 4.5s ease-in-out forwards;
+    transform: translate(-50%, -150%);
+    animation: toast-in-down-out 4.5s ease-in-out forwards;
 }
 
 .toast-icon {

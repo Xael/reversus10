@@ -69,6 +69,11 @@ export async function tryToSpeak(aiPlayer) {
     const { gameState } = getState();
     const dialogueConfig = config.AI_DIALOGUE[aiPlayer.aiType];
 
+    // Give the AI a 60% chance to NOT speak, to reduce chatter.
+    if (Math.random() > 0.4) {
+        return;
+    }
+
     if (!dialogueConfig) {
         return;
     }
@@ -90,8 +95,6 @@ export async function tryToSpeak(aiPlayer) {
         return; // No lines available for this AI at all.
     }
 
-    // By not checking for previously spoken lines, we ensure the AI is never silent
-    // as long as they have dialogue configured. This is better than silence.
     const lineToSpeak = shuffle(linesForState)[0];
     updateLog({ type: 'dialogue', speaker: aiPlayer.aiType, message: `${aiPlayer.name}: "${lineToSpeak}"` });
 }

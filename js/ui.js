@@ -383,12 +383,23 @@ export const updateTurnIndicator = () => {
 export const showTurnIndicator = async () => {
     return new Promise(resolve => {
         const turnAnnounceEl = dom.turnAnnounceModal;
+        const turnContentEl = turnAnnounceEl.querySelector('.turn-announce-content');
+        if (!turnContentEl) {
+            resolve();
+            return;
+        }
+
         turnAnnounceEl.classList.remove('hidden');
-        turnAnnounceEl.style.animation = 'fade-in-out 1.5s forwards';
+        
+        // Remove animation class to be able to re-trigger it
+        turnContentEl.style.animation = 'none';
+        // force reflow
+        void turnContentEl.offsetWidth;
+        // re-add animation
+        turnContentEl.style.animation = 'fade-in-out 1.5s forwards';
 
         setTimeout(() => {
             turnAnnounceEl.classList.add('hidden');
-            turnAnnounceEl.style.animation = '';
             resolve();
         }, 1500);
     });
@@ -435,20 +446,20 @@ export const showRoundSummaryModal = (winners, scores) => {
  * Displays the game over modal.
  * @param {string} message - The message to display.
  * @param {string} [title="Fim de Jogo!"] - The title of the modal.
+ * @param {boolean} [showRestart=true] - Whether to show the restart button.
  */
-export const showGameOver = (message, title = "Fim de Jogo!") => {
+export const showGameOver = (message, title = "Fim de Jogo!", showRestart = true) => {
     const { gameTimerInterval, gameState } = getState();
     if(gameTimerInterval) clearInterval(gameTimerInterval);
     updateState('gameTimerInterval', null);
 
-    // The logic to continue a story is handled in the 'storyWinLoss' event listener
-    // in ui-handlers.js. This check is an additional safeguard.
     if (gameState?.isStoryMode && document.body.dataset.storyContinuation === 'true') {
         return;
     }
 
     dom.gameOverTitle.textContent = title;
     dom.gameOverMessage.textContent = message;
+    dom.restartButton.classList.toggle('hidden', !showRestart);
     dom.gameOverModal.classList.remove('hidden');
     dom.debugButton.classList.add('hidden');
 };

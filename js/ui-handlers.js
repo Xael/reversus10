@@ -21,6 +21,10 @@ function handleCardClick(cardElement) {
     const card = player.hand.find(c => c.id === cardId);
 
     if (card) {
+        // Prevent selecting a value card if one has already been played
+        if (card.type === 'value' && player.playedValueCardThisTurn) {
+            return;
+        }
         if(gameState.tutorialEffectCardsLocked && card.type === 'effect') return;
         gameState.selectedCard = (gameState.selectedCard?.id === cardId) ? null : card;
         ui.renderAll();
@@ -473,7 +477,13 @@ export function initializeUiHandlers() {
     dom.nextTrackButton.addEventListener('click', sound.changeTrack);
     dom.muteButton.addEventListener('click', sound.toggleMute);
     dom.volumeSlider.addEventListener('input', (e) => sound.setVolume(parseFloat(e.target.value)));
-    dom.debugButton.addEventListener('click', () => dom.gameMenuModal.classList.remove('hidden'));
+    
+    dom.debugButton.addEventListener('click', () => {
+        const { gameState } = getState();
+        // Prevent saving in non-story mode or during unsafe game phases
+        dom.menuSaveGameButton.disabled = !gameState?.isStoryMode || gameState.gamePhase !== 'playing';
+        dom.gameMenuModal.classList.remove('hidden');
+    });
     
     dom.gameMenuCloseButton.addEventListener('click', () => dom.gameMenuModal.classList.add('hidden'));
     dom.menuSaveGameButton.addEventListener('click', () => {
@@ -514,11 +524,10 @@ export function initializeUiHandlers() {
         const { gameState, storyState } = getState();
         if(gameState) gameState.gamePhase = 'game_over';
     
-        // Battles where losing means game over and return to menu
         const hardFailBattles = ['contravox', 'reversum', 'necroverso_king', 'necroverso_final'];
     
         if (!won && hardFailBattles.includes(battle)) {
-            let loseMessage = "Você Perdeu!"; // Default loss message
+            let loseMessage = "Você Perdeu!";
             if (battle === 'necroverso_final') {
                 if (reason === 'collision') loseMessage = "A escuridão te alcançou...";
                 else if (reason === 'black_hole') loseMessage = "Você caiu em um buraco negro e foi derrotado.";
@@ -526,35 +535,40 @@ export function initializeUiHandlers() {
                 else loseMessage = "A escuridão consome tudo...";
             }
     
-            ui.showGameOver(loseMessage, "Você Perdeu!");
+            ui.showGameOver(loseMessage, "Você Perdeu!", false);
             achievements.grantAchievement('first_defeat');
             
             setTimeout(() => {
                 dom.gameOverModal.classList.add('hidden');
-                ui.showSplashScreen(); // Go back to main menu
+                ui.showSplashScreen();
             }, 3000);
             
-            return; // Stop execution, do not progress story
+            return;
         }
     
-        // If we're here, it's either a win, or a loss in a "soft-fail" battle
         let nextNodeId = null;
+        let portrait;
         
         switch(battle) {
             case 'tutorial_necroverso':
                 const lines = won ? config.AI_DIALOGUE.necroverso_tutorial.losing : config.AI_DIALOGUE.necroverso_tutorial.winning;
-                ui.showGameOver(lines[Math.floor(Math.random() * lines.length)], won ? "Você Venceu!" : "Você Perdeu!");
+                ui.showGameOver(lines[Math.floor(Math.random() * lines.length)], won ? "Você Venceu!" : "Você Perdeu!", false);
                 achievements.grantAchievement(won ? 'first_win' : 'first_defeat');
                 nextNodeId = 'post_tutorial';
                 break;
             case 'contravox':
-                 ui.showGameOver("!otiderca oãN", "Você Venceu!");
+                 portrait = document.querySelector('#player-area-player-3 .player-area-character-portrait');
+                 if (portrait) await shatterImage(portrait);
+                 ui.showGameOver("!otiderca oãN", "Você Venceu!", false);
                  achievements.grantAchievement('contravox_win');
-                 await shatterImage(document.getElementById('story-character-image'));
                  nextNodeId = 'post_contravox_victory';
                  break;
             case 'versatrix':
-                ui.showGameOver(won ? "Eu pensei... que você era diferente..." : "Obrigada por me deixar vencer...", won ? "Você Venceu!" : "Você Perdeu!");
+                if (won) {
+                    portrait = document.querySelector('#player-area-player-4 .player-area-character-portrait');
+                    if (portrait) await shatterImage(portrait);
+                }
+                ui.showGameOver(won ? "Eu pensei... que você era diferente..." : "Obrigada por me deixar vencer...", won ? "Você Venceu!" : "Você Perdeu!", false);
                 if(won) {
                     achievements.grantAchievement('versatrix_win');
                 } else {
@@ -564,26 +578,25 @@ export function initializeUiHandlers() {
                 nextNodeId = won ? 'post_versatrix_victory' : 'post_versatrix_defeat';
                 break;
             case 'reversum':
-                 ui.showGameOver("...INTERESSANTE", "Você Venceu!");
+                 portrait = document.querySelector('#player-area-player-2 .player-area-character-portrait');
+                 if (portrait) await shatterImage(portrait);
+                 ui.showGameOver("...INTERESSANTE", "Você Venceu!", false);
                  achievements.grantAchievement('reversum_win');
                  nextNodeId = 'post_reversum_victory';
                  break;
             case 'necroverso_king':
-                ui.showGameOver("Impossível!", "Você Venceu!");
+                ui.showGameOver("Impossível!", "Você Venceu!", false);
                 achievements.grantAchievement('true_end_beta');
                 nextNodeId = 'post_necroverso_king_victory';
                 break;
             case 'necroverso_final':
-                // Loss is handled above, this only runs on win
                 if (won) {
                     achievements.grantAchievement('true_end_final');
                     await story.playEndgameSequence();
                 }
-                // No next node, game ends here
                 break;
         }
     
-        // If a next story node is set, proceed after a delay
         if (nextNodeId) {
             setTimeout(() => {
                 dom.gameOverModal.classList.add('hidden');
@@ -592,7 +605,4 @@ export function initializeUiHandlers() {
             }, 3000);
         }
     });
-    
-    // --- Developer Hotkeys ---
-    // Removed for production testing
 }
