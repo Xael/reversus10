@@ -36,6 +36,10 @@ const appState = {
     reversusTotalIndividualFlow: false,
     // Interval for the secret Versatrix card animation on the splash screen.
     versatrixCardInterval: null,
+    // Interval for the INVERSUS boss animation.
+    inversusAnimationInterval: null,
+    // Interval for the secret battle logo glitch effect.
+    glitchInterval: null,
 };
 
 /**

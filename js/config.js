@@ -16,15 +16,23 @@ export const TEAM_B = ['player-2', 'player-4'];
 export const VALUE_DECK_CONFIG = [{ value: 2, count: 12 }, { value: 4, count: 10 }, { value: 6, count: 8 }, { value: 8, count: 6 }, { value: 10, count: 4 }];
 export const EFFECT_DECK_CONFIG = [{ name: 'Mais', count: 4 }, { name: 'Menos', count: 4 }, { name: 'Sobe', count: 4 }, { name: 'Desce', count: 4 }, { name: 'Pula', count: 4 }, { name: 'Reversus', count: 4 }, { name: 'Reversus Total', count: 1 }];
 
-export const MUSIC_TRACKS = ['jogo.ogg', 'jogo2.ogg', 'jogo3.ogg', 'contravox.ogg', 'versatrix.ogg', 'reversum.ogg', 'necroverso.ogg', 'necroversofinal.ogg', 'inversus.ogg', 'tela.ogg'];
+export const MUSIC_TRACKS = ['jogo.ogg', 'jogo2.ogg', 'jogo3.ogg', 'contravox.ogg', 'versatrix.ogg', 'reversum.ogg', 'necroverso.ogg', 'necroversofinal.ogg', 'inversus.ogg', 'tela.ogg', 'narrador.ogg'];
 
-export const ALL_CARD_IMAGES = [
+// Renamed from ALL_CARD_IMAGES and removed boss cards
+export const BASE_CARD_IMAGES = [
     'verso_valor.png', 'verso_efeito.png', 'frente_2.png', 'frente_4.png',
     'frente_6.png', 'frente_8.png', 'frente_10.png', 'frente_mais.png',
     'frente_menos.png', 'frente_sobe.png', 'frente_desce.png', 'frente_pula.png',
-    'frente_reversus.png', 'frente_reversustotal.png', 'cartanecroverso.png',
-    'cartaversatrix.png'
+    'frente_reversus.png', 'frente_reversustotal.png'
 ];
+
+// New constant for boss-related cards
+export const BOSS_CARD_IMAGES = [
+    'cartacontravox.png', 
+    'cartaversatrix.png', 
+    'cartanecroverso.png'
+];
+
 
 export const POSITIVE_EFFECTS = {
     'Resto Maior': 'Seu resto nesta rodada é 10. Se estiver em dupla o resto da dupla é 10.',
@@ -79,6 +87,10 @@ export const AI_DIALOGUE = {
     'reversum': {
         winning: ["PENSEI QUE SERIA UM DESAFIO", "FÁCIL DEMAIS"],
         losing: ["...", "INTERESSANTE"]
+    },
+    'narrador': {
+        winning: ["Eu estudei todos as suas jogadas...", "Eu já fiz todos os cálculos para te vencer em menos de 10 jogadas.", "Suas chances são... estatisticamente insignificantes."],
+        losing: ["Interessante... uma variação inesperada.", "Você foi um bom oponente..."]
     }
 };
 

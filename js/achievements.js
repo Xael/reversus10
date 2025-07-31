@@ -13,6 +13,20 @@ function checkAndShowSpecialFeatures() {
     const { achievements } = getState();
     if (achievements.has('all_achievements')) {
         dom.inversusModeButton.classList.remove('hidden');
+
+        // Start the secret battle logo glitch effect
+        const { glitchInterval } = getState();
+        if (glitchInterval) clearInterval(glitchInterval);
+
+        const logoEl = dom.splashLogo;
+        if (logoEl) {
+            let isGlitching = false;
+            const newInterval = setInterval(() => {
+                isGlitching = !isGlitching;
+                logoEl.classList.toggle('effect-glitch', isGlitching);
+            }, 10000); // Toggle every 10 seconds
+            updateState('glitchInterval', newInterval);
+        }
     }
 }
 
@@ -103,15 +117,11 @@ export function grantAchievement(id) {
         
         // Check for 100% completion
         if (id !== 'all_achievements' && checkAllAchievementsUnlocked()) {
-            achievements.add('all_achievements');
-            console.log("All achievements unlocked!");
-            const allAchievementsData = config.ACHIEVEMENTS['all_achievements'];
-            playSoundEffect('conquista');
-            showAchievementNotification(allAchievementsData);
-            checkAndShowSpecialFeatures();
+            grantAchievement('all_achievements'); // Recursively grant the final one
         }
 
         saveAchievements();
+        checkAndShowSpecialFeatures(); // Check features after every new achievement
     }
 }
 

@@ -75,23 +75,27 @@ export const renderCard = (card, context, playerId) => {
         }
     }
     
-
-    const isContravoxAbilityActive = isHumanPlayer && context === 'player-hand' && gameState.player1CardsObscured;
+    const isCardObscuredByContravox = isHumanPlayer && context === 'player-hand' && gameState.player1CardsObscured;
+    
+    let cardTitle = '';
+    if (isCardObscuredByContravox && card.type === 'effect') {
+        cardTitle = 'title="Não é possível saber qual efeito será aplicado..."';
+    }
 
     let cardStyle;
-    if (isContravoxAbilityActive) {
+    if (isCardObscuredByContravox) {
         cardStyle = `style="background-image: url('cartacontravox.png');"`;
     } else {
         cardStyle = `style="background-image: url('${getCardImageUrl(card, isHidden)}');"`;
     }
     
-    // Disable zoom button during Contravox ability to prevent modal lock
-    const maximizeButtonHTML = !isHidden && !isContravoxAbilityActive ? '<div class="card-maximize-button" title="Ver carta"></div>' : '';
+    const maximizeButtonHTML = !isHidden && !isCardObscuredByContravox ? '<div class="card-maximize-button" title="Ver carta"></div>' : '';
 
-    return `<div class="${classList.join(' ')}" data-card-id="${card.id}" ${isCardDisabled ? 'aria-disabled="true"' : ''} ${cardStyle}>
+    return `<div class="${classList.join(' ')}" data-card-id="${card.id}" ${cardTitle} ${isCardDisabled ? 'aria-disabled="true"' : ''} ${cardStyle}>
                 ${maximizeButtonHTML}
             </div>`;
 };
+
 
 /**
  * Renders a single player's entire area, including header, hand, and play zone.
@@ -107,6 +111,11 @@ export const renderPlayerArea = (player) => {
     // Apply classes for styling
     playerEl.className = 'player-area'; // Reset classes
     playerEl.classList.add(`p${pIdNum}-bg`);
+
+    if (player.aiType === 'contravox') playerEl.classList.add('contravox-glow');
+    if (player.aiType === 'versatrix') playerEl.classList.add('versatrix-glow');
+    if (player.aiType === 'reversum') playerEl.classList.add('reversum-glow');
+
     if (player.aiType === 'necroverso_tutorial') playerEl.classList.add('player-area-necro-tutorial');
     else if (player.aiType === 'necroverso_final') playerEl.classList.add('player-area-necro-final');
     
@@ -127,10 +136,15 @@ export const renderPlayerArea = (player) => {
         'reversum': 'reversum.png'
     };
 
-    if (storyBossPortraits[player.aiType]) {
-        portraitHTML = `<img src="${storyBossPortraits[player.aiType]}" class="player-area-character-portrait" alt="${player.name} portrait">`;
+    if (gameState.isInversusMode && player.aiType === 'inversus') {
+        portraitHTML = `<img src="inversum1.png" id="inversus-character-portrait" class="inversus-character-portrait" alt="Inversus portrait">`;
+    } else if (storyBossPortraits[player.aiType]) {
+        // Prevent showing the Versatrix portrait for player 1 if they somehow get it
+        if (!(player.aiType === 'versatrix' && player.id === 'player-1')) {
+            const portraitSrc = storyBossPortraits[player.aiType];
+            portraitHTML = `<img src="${portraitSrc}" class="player-area-character-portrait" alt="${player.name} portrait">`;
+        }
     }
-
 
     if (player.name === 'Rei Necroverso') {
         if (player.aiType === 'reversum') playerNameClass = 'player-name player-2';
@@ -166,7 +180,9 @@ export const renderPlayerArea = (player) => {
     const positionLabel = gameState.isInversusMode ? 'Vitórias' : 'Casa';
     const positionValue = player.position;
     const effectsHTML = effectsList.length > 0 ? effectsList.map(e => `<span>${e}</span>`).join(' ') : 'Nenhum';
-    const scoreDisplay = (player.id === 'player-1' && gameState.player1CardsObscured) ? '?' : player.liveScore;
+    
+    // Logic for Contravox score display
+    const scoreDisplay = player.liveScore;
 
     const statsHTML = `
         <div class="player-stats">
@@ -354,8 +370,8 @@ export const updateTurnIndicator = () => {
     switch (gameState.gamePhase) {
         case 'paused': turnText = `${player.name} está pensando...`; break;
         case 'targeting': turnText = 'Escolha um alvo para o efeito...'; break;
-        case 'reversus_targeting': turnText = `Escolha o tipo de efeito para reverter em ${gameState.reversusTarget.targetPlayerId}...`; break;
-        case 'pula_casting': turnText = `Escolha um caminho para ${gameState.pulaTarget.targetPlayerId} pular...`; break;
+        case 'reversus_targeting': turnText = `Escolha o tipo de efeito para reverter em ${gameState.players[gameState.reversusTarget.targetPlayerId].name}...`; break;
+        case 'pula_casting': turnText = `Escolha um caminho para ${gameState.players[gameState.pulaTarget.targetPlayerId].name} pular...`; break;
         case 'field_effect_targeting': turnText = 'Escolha um alvo para o Efeito de Campo...'; break;
         case 'path_selection': turnText = 'Escolhendo caminhos...'; break;
         case 'resolution': turnText = 'Resolvendo a rodada...'; break;
@@ -468,11 +484,20 @@ export const showGameOver = (message, title = "Fim de Jogo!", showRestart = true
  * Initializes and displays the splash screen.
  */
 export const showSplashScreen = () => {
-    const { versatrixCardInterval } = getState();
+    const { versatrixCardInterval, inversusAnimationInterval, glitchInterval } = getState();
     if (versatrixCardInterval) {
         clearInterval(versatrixCardInterval);
         updateState('versatrixCardInterval', null);
     }
+    if (inversusAnimationInterval) {
+        clearInterval(inversusAnimationInterval);
+        updateState('inversusAnimationInterval', null);
+    }
+    if (glitchInterval) {
+        clearInterval(glitchInterval);
+        updateState('glitchInterval', null);
+    }
+
 
     dom.appContainerEl.classList.add('hidden');
     dom.debugButton.classList.add('hidden');
@@ -503,6 +528,9 @@ export const showSplashScreen = () => {
     updateMusic();
 
     checkForSavedGame();
+    // Re-check for special features now that we're on the splash screen
+    const achievements = require('./achievements.js');
+    achievements.checkAndShowSpecialFeatures();
 };
 
 /**

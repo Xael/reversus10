@@ -154,3 +154,6 @@ export const leftScoreBox = document.getElementById('left-score-box');
 export const rightScoreBox = document.getElementById('right-score-box');
 export const leftScoreValue = document.getElementById('left-score-value');
 export const rightScoreValue = document.getElementById('right-score-value');
+
+// Secret Battle
+export const splashLogo = document.getElementById('splash-logo');

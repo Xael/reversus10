@@ -1,14 +1,15 @@
 
 
+
 import * as config from './config.js';
 import * as dom from './dom.js';
 import { getState, updateState } from './state.js';
-import { renderAll, updateTurnIndicator, showTurnIndicator, showRoundSummaryModal, renderPlayerArea, renderBoard, showGameOver, renderCard } from './ui.js';
+import { renderAll, updateTurnIndicator, showTurnIndicator, showRoundSummaryModal, renderPlayerArea, renderBoard, showGameOver, renderCard, showSplashScreen } from './ui.js';
 import { playStoryMusic, stopStoryMusic, announceEffect, playSoundEffect } from './sound.js';
 import { triggerFieldEffects, tryToSpeak } from './story-abilities.js';
 import { updateLog, shuffle, createDeck } from './utils.js';
 import { grantAchievement } from './achievements.js';
-import { animateNecroX } from './animations.js';
+import { animateNecroX, showInversusVictoryAnimation } from './animations.js';
 
 /**
  * Updates the in-game timer display, handling normal and countdown modes.
@@ -17,7 +18,7 @@ export const updateGameTimer = () => {
     const { gameStartTime, gameState, gameTimerInterval } = getState();
     if (!gameStartTime || !gameState) return;
 
-    if (gameState.isFinalBoss) {
+    if (gameState.currentStoryBattle === 'necroverso_final') {
         const totalSeconds = 20 * 60; // 20 minutes countdown
         const elapsed = Math.floor((Date.now() - gameStartTime) / 1000);
         const remaining = totalSeconds - elapsed;
@@ -88,41 +89,60 @@ const generateBoardPaths = (options = {}) => {
 
         // Black holes for final boss
         if (options.isFinalBoss) {
-            const numBlackHoles = Math.random() > 0.5 ? 2 : 1;
+            let numBlackHoles;
+            if (options.storyBattle === 'necroverso_king') {
+                numBlackHoles = 1; // Exactly one for the 1v3 battle.
+            } else { // This implies necroverso_final
+                numBlackHoles = Math.random() > 0.5 ? 2 : 1; // Keep old logic for the 2v2 battle.
+            }
+            
             for(let k = 0; k < numBlackHoles && currentSpaceIndex < colorableSpaceIds.length; k++) {
                 const spaceToBlacken = spaces.find(s => s.id === colorableSpaceIds[currentSpaceIndex]);
                 if (spaceToBlacken) spaceToBlacken.color = 'black';
                 currentSpaceIndex++;
             }
         }
-
-        // Blue/Red spaces
-        const numBlueRed = options.isFinalBoss ? 1 : config.COLORED_SPACES_PER_PATH;
-        for (let k = 0; k < numBlueRed && currentSpaceIndex < colorableSpaceIds.length; k++) {
-            const spaceToColor = spaces.find(s => s.id === colorableSpaceIds[currentSpaceIndex]);
-            const isReversumBattle = options.storyBattle === 'reversum';
-            const isPositive = isReversumBattle ? false : (Math.random() > 0.5);
-             if (spaceToColor) {
-                if (isPositive) {
-                    spaceToColor.color = 'blue';
-                    spaceToColor.effectName = shuffle([...allPositiveEffects])[0];
-                } else {
-                    spaceToColor.color = 'red';
-                    spaceToColor.effectName = shuffle([...allNegativeEffects])[0];
-                }
-            }
-            currentSpaceIndex++;
-        }
         
-        // Yellow spaces
-        const isVersatrixBattle = options.storyBattle === 'versatrix' || options.isFinalBoss;
-        if (isVersatrixBattle && currentSpaceIndex < colorableSpaceIds.length) {
-            const numYellow = 1;
-             for (let k = 0; k < numYellow && currentSpaceIndex < colorableSpaceIds.length; k++) {
-                const spaceToYellow = spaces.find(s => s.id === colorableSpaceIds[currentSpaceIndex]);
-                if (spaceToYellow) spaceToYellow.color = 'yellow';
+        // Red, Blue, and Yellow for Narrator battle
+        if (options.storyBattle === 'narrador') {
+            const colors = ['red', 'blue', 'yellow'];
+            for(let k = 0; k < colors.length && currentSpaceIndex < colorableSpaceIds.length; k++) {
+                const spaceToColor = spaces.find(s => s.id === colorableSpaceIds[currentSpaceIndex]);
+                if (spaceToColor) {
+                    spaceToColor.color = colors[k];
+                    // Narrator doesn't use named field effects, just color logic.
+                }
                 currentSpaceIndex++;
-             }
+            }
+        } else {
+             // Blue/Red spaces
+            const numBlueRed = options.isFinalBoss ? 1 : config.COLORED_SPACES_PER_PATH;
+            for (let k = 0; k < numBlueRed && currentSpaceIndex < colorableSpaceIds.length; k++) {
+                const spaceToColor = spaces.find(s => s.id === colorableSpaceIds[currentSpaceIndex]);
+                const isReversumBattle = options.storyBattle === 'reversum';
+                const isPositive = isReversumBattle ? false : (Math.random() > 0.5);
+                 if (spaceToColor) {
+                    if (isPositive) {
+                        spaceToColor.color = 'blue';
+                        spaceToColor.effectName = shuffle([...allPositiveEffects])[0];
+                    } else {
+                        spaceToColor.color = 'red';
+                        spaceToColor.effectName = shuffle([...allNegativeEffects])[0];
+                    }
+                }
+                currentSpaceIndex++;
+            }
+            
+            // Yellow spaces
+            const isVersatrixBattle = options.storyBattle === 'versatrix' || options.isFinalBoss;
+            if (isVersatrixBattle && currentSpaceIndex < colorableSpaceIds.length) {
+                const numYellow = 1;
+                 for (let k = 0; k < numYellow && currentSpaceIndex < colorableSpaceIds.length; k++) {
+                    const spaceToYellow = spaces.find(s => s.id === colorableSpaceIds[currentSpaceIndex]);
+                    if (spaceToYellow) spaceToYellow.color = 'yellow';
+                    currentSpaceIndex++;
+                 }
+            }
         }
         
         const playerId = i < config.MASTER_PLAYER_IDS.length ? config.MASTER_PLAYER_IDS[i] : null;
@@ -157,6 +177,21 @@ export const initializeGame = async (mode, options) => {
         modeText = 'Modo Inversus';
         dom.splashScreenEl.classList.add('hidden');
         playStoryMusic('inversus.ogg');
+
+        // Clear previous interval if any
+        const { inversusAnimationInterval } = getState();
+        if (inversusAnimationInterval) clearInterval(inversusAnimationInterval);
+
+        const inversusImages = ['inversum1.png', 'inversum2.png', 'inversum3.png'];
+        let imageIndex = 0;
+        const intervalId = setInterval(() => {
+            const imgEl = document.getElementById('inversus-character-portrait');
+            if (imgEl) {
+                imageIndex = (imageIndex + 1) % inversusImages.length;
+                imgEl.src = inversusImages[imageIndex];
+            }
+        }, 2000); // Change image every 2 seconds
+        updateState('inversusAnimationInterval', intervalId);
     } else if (options.story) {
         isStoryMode = true;
         storyBattle = options.story.battle;
@@ -171,6 +206,7 @@ export const initializeGame = async (mode, options) => {
             case 'reversum': modeText = 'Modo História: Rei Reversum'; playStoryMusic('reversum.ogg'); break;
             case 'necroverso_king': modeText = 'Modo História: Rei Necroverso'; playStoryMusic('necroverso.ogg'); break;
             case 'necroverso_final': modeText = 'Modo História: Necroverso Final'; playStoryMusic('necroversofinal.ogg'); break;
+            case 'narrador': modeText = 'Batalha Secreta: Narrador'; playStoryMusic('narrador.ogg'); break;
             default: modeText = `Modo História: ${storyBattle}`; stopStoryMusic();
         }
     } else {
@@ -201,6 +237,9 @@ export const initializeGame = async (mode, options) => {
     dom.boardEl.classList.toggle('final-battle-board', isFinalBoss);
     dom.boardEl.classList.toggle('board-rotating', isInversusMode);
     
+    // Apply narrator monitor effect
+    dom.appContainerEl.classList.toggle('effect-monitor', storyBattle === 'narrador');
+
     const state = getState();
     if (!isStoryMode && !isInversusMode) {
         stopStoryMusic();
@@ -242,6 +281,13 @@ export const initializeGame = async (mode, options) => {
             if (isInversusMode) {
                 playerObject.hearts = 10;
                 playerObject.maxHearts = 10;
+            }
+             if (storyBattle === 'narrador' && id === 'player-2') {
+                playerObject.narratorAbilities = {
+                    confusion: true,
+                    reversus: true,
+                    necroX: true
+                };
             }
             return [id, playerObject];
         })
@@ -493,18 +539,27 @@ export const applyEffect = (card, targetId, casterName, effectTypeToReverse) => 
             dom.appContainerEl.classList.add('reversus-total-active');
             dom.reversusTotalIndicatorEl.classList.remove('hidden');
             Object.values(gameState.players).forEach(p => {
-                const scoreCard = p.playedCards.effect.find(c => ['Mais', 'Menos', 'NECRO X', 'NECRO X Invertido'].includes(c.name));
-                const moveCard = p.playedCards.effect.find(c => ['Sobe', 'Desce', 'Pula'].includes(c.name));
-
-                if (scoreCard && !scoreCard.isLocked) {
+                // Find the card currently occupying the score slot.
+                const scoreEffectCard = p.playedCards.effect.find(c => 
+                    ['Mais', 'Menos', 'NECRO X', 'NECRO X Invertido'].includes(c.name) || 
+                    (c.name === 'Reversus' && c.reversedEffectType === 'score')
+                );
+                
+                // If there's a score effect active AND the card in the slot is NOT locked, invert the effect.
+                if (p.effects.score && (!scoreEffectCard || !scoreEffectCard.isLocked)) {
                     p.effects.score = getInverseEffect(p.effects.score);
                 }
-                if (moveCard && !moveCard.isLocked) {
-                     if (p.effects.movement === 'Pula') {
-                         // Global Reversus Total does not affect Pula
-                     } else {
-                        p.effects.movement = getInverseEffect(p.effects.movement);
-                     }
+
+                // Find the card currently occupying the movement slot.
+                const moveEffectCard = p.playedCards.effect.find(c =>
+                    ['Sobe', 'Desce', 'Pula'].includes(c.name) ||
+                    (c.name === 'Reversus' && c.reversedEffectType === 'movement')
+                );
+                
+                // If there's a movement effect active AND it's not locked, invert it.
+                // Pula is not affected by global Reversus Total.
+                if (p.effects.movement && p.effects.movement !== 'Pula' && (!moveEffectCard || !moveEffectCard.isLocked)) {
+                    p.effects.movement = getInverseEffect(p.effects.movement);
                 }
             });
             updateLog(`${casterName} usou REVERSUS TOTAL! Todos os efeitos não travados foram invertidos!`);
@@ -668,7 +723,6 @@ export const playCard = (caster, card, effectTargetId, effectTypeToReverse, opti
     
     if (caster.isHuman) {
         gameState.selectedCard = null;
-        gameState.reversusTarget = null;
         updateState('reversusTotalIndividualFlow', false);
     }
 };
@@ -680,6 +734,38 @@ const getAiTurnDecision = (aiPlayer) => {
     const playerIds = gameState.playerIdsInGame;
     
     let myTeamIds, opponentIds;
+
+    // --- Narrator AI ---
+    if (aiPlayer.aiType === 'narrador') {
+        const player1 = gameState.players['player-1'];
+        // Use abilities once per game
+        if (aiPlayer.narratorAbilities.confusion && Math.random() < 0.33) {
+            actions.push({ action: 'use_narrator_ability', ability: 'confusion' });
+            aiPlayer.narratorAbilities.confusion = false;
+        } else if (aiPlayer.narratorAbilities.reversus && Math.random() < 0.5) {
+             actions.push({ action: 'use_narrator_ability', ability: 'reversus' });
+             aiPlayer.narratorAbilities.reversus = false;
+        } else if (aiPlayer.narratorAbilities.necroX && aiPlayer.resto?.value >= 6) {
+             actions.push({ action: 'use_narrator_ability', ability: 'necroX' });
+             aiPlayer.narratorAbilities.necroX = false;
+        }
+
+        // Play cards smartly
+        const valueCardsInHand = aiPlayer.hand.filter(c => c.type === 'value');
+        if (!aiPlayer.playedValueCardThisTurn && valueCardsInHand.length >= 2) {
+             actions.push({ action: 'play', cardId: valueCardsInHand[valueCardsInHand.length - 1].id, card: valueCardsInHand[valueCardsInHand.length - 1] });
+        }
+        const effectCardsInHand = aiPlayer.hand.filter(c => c.type === 'effect');
+        if (effectCardsInHand.length > 0) {
+            const cardToPlay = effectCardsInHand[0];
+            let target = aiPlayer.id; // Default self-target
+            if (['Menos', 'Desce', 'Pula'].includes(cardToPlay.name)) {
+                target = 'player-1';
+            }
+            actions.push({ action: 'play', cardId: cardToPlay.id, card: cardToPlay, target });
+        }
+        return { actions };
+    }
 
     // --- Versatrix Ally Logic ---
     if (gameState.storyBattleType === '1v3_king' && aiPlayer.aiType === 'versatrix') {
@@ -969,6 +1055,16 @@ export async function executeAiTurn(aiPlayer) {
             announceEffect("INVERSÃO TOTAL", "inversus-total", 2500);
             gameState.inversusTotalAbilityActive = true;
             dom.scalableContainer.classList.add('inversus-total-active');
+        } else if (action.action === 'use_narrator_ability') {
+            const storyAbilities = await import('./story-abilities.js');
+            switch(action.ability) {
+                case 'confusion': await storyAbilities.triggerContravox(); break;
+                case 'reversus':
+                     updateLog("Narrador usa sua habilidade: REVERSUS TOTAL!");
+                     applyEffect({ name: 'Reversus Total' }, aiPlayer.id, aiPlayer.name);
+                     break;
+                case 'necroX': await storyAbilities.triggerNecroX(aiPlayer); break;
+            }
         } else if (action.action === 'play') {
             const cardInHand = aiPlayer.hand.find(c => c.id === action.cardId);
             if (cardInHand) {
@@ -1575,9 +1671,9 @@ const endGameCheck = async () => {
             return;
         }
         if (inversus.hearts <= 0) {
-            showGameOver('Inversus perdeu todos os corações. Você venceu!');
             grantAchievement('first_win');
             grantAchievement('inversus_win');
+            showInversusVictoryAnimation();
             return;
         }
     } else if (gameState.isStoryMode) {

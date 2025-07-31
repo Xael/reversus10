@@ -1,3 +1,6 @@
+
+
+
 import * as dom from './dom.js';
 import { getState, updateState } from './state.js';
 import * as game from './game.js';
@@ -182,6 +185,21 @@ export function initializeUiHandlers() {
         }
     });
 
+    if (dom.splashLogo) {
+        dom.splashLogo.addEventListener('click', () => {
+            if (dom.splashLogo.classList.contains('effect-glitch')) {
+                sound.initializeMusic();
+                game.initializeGame('solo', {
+                    story: {
+                        battle: 'narrador',
+                        playerIds: ['player-1', 'player-2'],
+                        overrides: { 'player-2': { name: 'Narrador', aiType: 'narrador' } }
+                    }
+                });
+            }
+        });
+    }
+
     // --- Game Setup ---
     const setupGame = (numPlayers, mode = 'solo') => {
         game.initializeGame(mode, { numPlayers, overrides: {} });
@@ -282,13 +300,17 @@ export function initializeUiHandlers() {
     dom.reversusTargetScoreButton.addEventListener('click', () => {
         const { gameState } = getState();
         dom.reversusTargetModal.classList.add('hidden');
+        gameState.gamePhase = 'playing';
         game.playCard(gameState.players['player-1'], gameState.reversusTarget.card, gameState.reversusTarget.targetPlayerId, 'score');
+        gameState.reversusTarget = null;
     });
 
     dom.reversusTargetMovementButton.addEventListener('click', () => {
         const { gameState } = getState();
         dom.reversusTargetModal.classList.add('hidden');
+        gameState.gamePhase = 'playing';
         game.playCard(gameState.players['player-1'], gameState.reversusTarget.card, gameState.reversusTarget.targetPlayerId, 'movement');
+        gameState.reversusTarget = null;
     });
 
     dom.reversusTargetCancelButton.addEventListener('click', () => {
@@ -331,6 +353,7 @@ export function initializeUiHandlers() {
             const { card, targetPlayerId } = gameState.reversusTarget;
             
             dom.reversusIndividualEffectChoiceModal.classList.add('hidden');
+            gameState.gamePhase = 'playing'; // Reset phase before card play
             
             const options = { isIndividualLock: true, effectNameToApply };
             game.playCard(gameState.players['player-1'], card, targetPlayerId, null, options);
@@ -473,11 +496,23 @@ export function initializeUiHandlers() {
     // Game Menu
     dom.fullscreenButton.addEventListener('click', () => {
         if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen();
+            document.documentElement.requestFullscreen().catch(err => {
+                alert(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+            });
         } else {
             if (document.exitFullscreen) {
                 document.exitFullscreen();
             }
+        }
+    });
+
+    document.addEventListener('fullscreenchange', () => {
+        const isFullscreen = !!document.fullscreenElement;
+        const enterIcon = document.getElementById('fullscreen-icon-enter');
+        const exitIcon = document.getElementById('fullscreen-icon-exit');
+        if (enterIcon && exitIcon) {
+            enterIcon.classList.toggle('hidden', isFullscreen);
+            exitIcon.classList.toggle('hidden', !isFullscreen);
         }
     });
     
@@ -532,7 +567,7 @@ export function initializeUiHandlers() {
         const { gameState, storyState } = getState();
         if(gameState) gameState.gamePhase = 'game_over';
     
-        const hardFailBattles = ['contravox', 'reversum', 'necroverso_king', 'necroverso_final'];
+        const hardFailBattles = ['contravox', 'reversum', 'necroverso_king', 'necroverso_final', 'narrador'];
     
         if (!won && hardFailBattles.includes(battle)) {
             let loseMessage = "Você Perdeu!";
@@ -541,6 +576,8 @@ export function initializeUiHandlers() {
                 else if (reason === 'black_hole') loseMessage = "Você caiu em um buraco negro e foi derrotado.";
                 else if (reason === 'time') loseMessage = "O tempo acabou...";
                 else loseMessage = "A escuridão consome tudo...";
+            } else if (battle === 'narrador') {
+                loseMessage = "Você foi um bom oponente...";
             }
     
             ui.showGameOver(loseMessage, "Você Perdeu!", false);
@@ -567,7 +604,10 @@ export function initializeUiHandlers() {
                 break;
             case 'contravox':
                  portrait = document.querySelector('#player-area-player-3 .player-area-character-portrait');
-                 if (portrait) await shatterImage(portrait);
+                 if (portrait) {
+                     await shatterImage(portrait);
+                     await new Promise(res => setTimeout(res, 2000)); // Wait after shatter
+                 }
                  ui.showGameOver("!otiderca oãN", "Você Venceu!", false);
                  achievements.grantAchievement('contravox_win');
                  nextNodeId = 'post_contravox_victory';
@@ -575,7 +615,10 @@ export function initializeUiHandlers() {
             case 'versatrix':
                 if (won) {
                     portrait = document.querySelector('#player-area-player-4 .player-area-character-portrait');
-                    if (portrait) await shatterImage(portrait);
+                    if (portrait) {
+                        await shatterImage(portrait);
+                        await new Promise(res => setTimeout(res, 2000)); // Wait after shatter
+                    }
                 }
                 ui.showGameOver(won ? "Eu pensei... que você era diferente..." : "Obrigada por me deixar vencer...", won ? "Você Venceu!" : "Você Perdeu!", false);
                 if(won) {
@@ -588,12 +631,25 @@ export function initializeUiHandlers() {
                 break;
             case 'reversum':
                  portrait = document.querySelector('#player-area-player-2 .player-area-character-portrait');
-                 if (portrait) await shatterImage(portrait);
+                 if (portrait) {
+                     await shatterImage(portrait);
+                     await new Promise(res => setTimeout(res, 2000)); // Wait after shatter
+                 }
                  ui.showGameOver("...INTERESSANTE", "Você Venceu!", false);
                  achievements.grantAchievement('reversum_win');
                  nextNodeId = 'post_reversum_victory';
                  break;
             case 'necroverso_king':
+                const kingPortraits = [
+                    document.querySelector('#player-area-player-2 .player-area-character-portrait'),
+                    document.querySelector('#player-area-player-3 .player-area-character-portrait'),
+                    document.querySelector('#player-area-player-4 .player-area-character-portrait')
+                ].filter(p => p);
+
+                if (kingPortraits.length > 0) {
+                    await Promise.all(kingPortraits.map(p => shatterImage(p)));
+                    await new Promise(res => setTimeout(res, 2000)); // Wait after all shatters
+                }
                 ui.showGameOver("Impossível!", "Você Venceu!", false);
                 achievements.grantAchievement('true_end_beta');
                 nextNodeId = 'post_necroverso_king_victory';
@@ -604,18 +660,47 @@ export function initializeUiHandlers() {
                     await story.playEndgameSequence();
                 }
                 break;
+            case 'narrador':
+                 if (won) {
+                    ui.showGameOver("Parabéns! É... agora não tem mais segredos ;)", "VITÓRIA SECRETA", false);
+                    setTimeout(() => {
+                        dom.gameOverModal.classList.add('hidden');
+                        ui.showSplashScreen();
+                    }, 4000);
+                 }
+                 break;
         }
     
         if (nextNodeId) {
-            // After winning, hide restart and continue story flow
-            document.body.dataset.storyContinuation = 'true';
-            setTimeout(() => {
-                delete document.body.dataset.storyContinuation;
-                dom.gameOverModal.classList.add('hidden');
-                // Return control to story manager
-                dom.storyModeModalEl.classList.remove('hidden');
-                story.renderStoryNode(nextNodeId);
-            }, 4000);
+            const currentRestartButton = document.getElementById('restart-button');
+    
+            if (currentRestartButton && currentRestartButton.parentNode) {
+                const newContinueButton = currentRestartButton.cloneNode(true); 
+                newContinueButton.textContent = "Continuar";
+                newContinueButton.classList.remove('hidden');
+    
+                const continueHandler = () => {
+                    dom.gameOverModal.classList.add('hidden');
+                    dom.storyModeModalEl.classList.remove('hidden');
+                    
+                    // FIX: Ensure the dialogue scene is visible and ready for the next node.
+                    dom.storyScene1El.classList.add('hidden');
+                    dom.storySceneDialogueEl.classList.remove('hidden');
+                    dom.storySceneDialogueEl.style.opacity = 1;
+
+                    story.renderStoryNode(nextNodeId);
+                };
+    
+                newContinueButton.addEventListener('click', continueHandler, { once: true });
+                currentRestartButton.parentNode.replaceChild(newContinueButton, currentRestartButton);
+            } else {
+                console.error("STORY ERROR: Could not find restart button. Advancing automatically.");
+                setTimeout(() => {
+                    dom.gameOverModal.classList.add('hidden');
+                    dom.storyModeModalEl.classList.remove('hidden');
+                    story.renderStoryNode(nextNodeId);
+                }, 2000);
+            }
         }
     });
 }

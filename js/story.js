@@ -1,17 +1,19 @@
+
+
 import * as dom from './dom.js';
 import { getState, updateState } from './state.js';
 import { playStoryMusic, stopStoryMusic, initializeMusic } from './sound.js';
-import { shatterImage } from './animations.js';
+import { shatterImage, createStarryBackground } from './animations.js';
 
 const storyDialogue = {
     'start_necroverso': {
         character: 'Necroverso', image: 'necroverso.png',
-        text: 'Você está no Inversum... Eu sou o Necroverso. Se quiser voltar ao seu mundo deverá vencer os soberanos deste lugar: Contravox, Versatrix e Reversum.',
-        options: [{ text: 'Vencer?', next: 'pre_tutorial_prompt' }]
+        text: 'Olá forasteiro... seja bem vindo! Você está no Inversus e eu sou o Necroverso. Se quiser voltar ao seu mundo deverá desafiar os soberanos deste lugar...',
+        options: [{ text: 'Desafiar...?', next: 'pre_tutorial_prompt' }]
     },
     'pre_tutorial_prompt': {
         character: 'Necroverso', image: 'necroverso.png',
-        text: 'Eles jogam um jogo de cartas e tabuleiro chamado Reversus. Quer que eu te ensine o básico em uma partida?',
+        text: 'Sim, através de um duelo! Eles jogam um jogo de cartas e tabuleiro chamado REVERSUS. Quer que eu te ensine o básico numa partida?',
         options: [
             { text: 'Sim, por favor.', next: 'tutorial_explain_1' },
             { text: 'Não, eu me viro.', next: 'tutorial_skip' }
@@ -19,7 +21,7 @@ const storyDialogue = {
     },
     'tutorial_skip': {
         character: 'Necroverso', image: 'necroverso.png',
-        text: 'Provavelmente você é um prodígio... Boa sorte então. Seu primeiro desafio será o Contravox.',
+        text: 'Provavelmente você é um prodígio... Boa sorte então. Enfrente então o Contravox.',
         isEndScene: true, nextScene: 'pre_contravox_intro'
     },
     'tutorial_explain_1': {
@@ -29,22 +31,22 @@ const storyDialogue = {
     },
     'tutorial_explain_2': {
         character: 'Necroverso', image: 'necroverso.png',
-        text: 'Sua pontuação é a soma de duas cartas de VALOR que você joga. Se tiver 2 ou mais cartas de valor, você DEVE jogar uma. Se tiver só uma, ela não poderá ser jogada. O seu Resto será sua última carta de VALOR jogada na rodada...',
+        text: 'Sua pontuação é a soma de duas cartas de VALOR que você joga. Se tiver 2 ou mais cartas de valor, você DEVE jogar uma. Se tiver só uma, ela permanece para a próxima rodada, a sua última carta jogada será seu "Resto".',
         next: 'tutorial_explain_3', isContinue: true
     },
     'tutorial_explain_3': {
         character: 'Necroverso', image: 'necroverso.png',
-        text: 'As cartas de EFEITO pode mudar tudo! "Mais" e "Menos" usam o valor do seu "Resto" para aumentar ou diminuir sua pontuação. "Sobe" e "Desce" movem seu peão.',
+        text: 'As cartas de EFEITO podem mudar tudo! "Mais" e "Menos" usam o valor do seu "Resto" para aumentar ou diminuir sua pontuação. "Sobe", "Desce" e "Pula"  movem seu peão.',
         next: 'tutorial_explain_4', isContinue: true
     },
     'tutorial_explain_4': {
         character: 'Necroverso', image: 'necroverso.png',
-        text: 'As cartas "Pula", "Reversus" e "Reversus Total" são mais complexas e podem virar o jogo. Você aprenderá o poder delas na prática.',
+        text: 'As cartas "Reversus" e "Reversus Total" são mais complexas e podem virar o jogo. Você aprenderá o poder delas na prática.',
         next: 'tutorial_explain_5', isContinue: true
     },
     'tutorial_explain_5': {
         character: 'Necroverso', image: 'necroverso.png',
-        text: 'Chega de papo. Vamos jogar. Não se preocupe em vencer, apenas em aprender.',
+        text: 'Chega de papo. Vamos jogar. Não pense em vencer, apenas em aprender as regras.',
         isEndStory: true,
         startGame: { battle: 'tutorial_necroverso' }
     },
@@ -79,23 +81,23 @@ const storyDialogue = {
     },
     'pre_versatrix_intro': {
         character: 'Necroverso', image: 'necroverso3.png',
-        text: 'A Versatrix é do signo de gêmeos... e ela é valiosa!',
-        options: [{ text: 'Certo... signos...', next: 'start_versatrix_dialogue' }, { text: 'Conceito de valor?', next: 'start_versatrix_dialogue' }]
+        text: 'A Versatrix é do signo de gêmeos... e ela é... valiosa!',
+        options: [{ text: 'Certo... signos...', next: 'start_versatrix_dialogue' }, { text: 'Defina valiosa...', next: 'start_versatrix_dialogue' }]
     },
     'start_versatrix_dialogue': {
         character: 'Versatrix', image: 'versatrix.png',
         text: () => {
             const { achievements } = getState();
             return achievements.has('versatrix_card_collected') 
-                ? "Gostou do meu presente?"
-                : "Caso me vença, te enviarei uma carta especial...";
+                ? "Eu tenhoa impressão que já nos encontramos em outra vida..."
+                : "Eu não quero perder... mas caso me vença... ainda assim eu te ajudarei...";
         },
         options: () => {
              const { achievements } = getState();
              return achievements.has('versatrix_card_collected')
-                ? [{ text: "Muito!", next: 'versatrix_end_game' }]
+                ? [{ text: "Talvez...", next: 'versatrix_end_game' }]
                 : [
-                    { text: "Carta?...", next: 'versatrix_sinto_muito' }, 
+                    { text: "Isto é ouro?", next: 'versatrix_sinto_muito' }, 
                     { text: "Você é solteira?", next: 'versatrix_solteira' }
                   ];
         }
@@ -105,7 +107,7 @@ const storyDialogue = {
     },
     'versatrix_sinto_muito': {
         character: 'Versatrix', image: 'versatrix.png',
-        text: "Não sinta... eu não sinto nada... quem sabe nesse duelo eu sinta ;)",
+        text: "Talvez ;)",
         isEndStory: true, startGame: { battle: 'versatrix' }
     },
     'versatrix_solteira': {
@@ -135,8 +137,8 @@ const storyDialogue = {
     },
     'start_reversum': {
         character: 'Reversum', image: 'reversum.png',
-        text: "CURVE-SE DIANTE DO SEU REI! EU SOU REX REVERSUM TOTIS",
-        options: [{ text: "Errar é humano...", next: 'reversum_end' }, { text: "Só quero zerar o jogo...", next: 'reversum_end' }, { text: "Leônidas?", next: 'reversum_end' }]
+        text: "EU SOU REX REVERSUM TOTEM! CURVE-SE DIANTE DO SEU REI!",
+        options: [{ text: "Rex? tipo um cachorro?", next: 'reversum_end' }, { text: "Só quero zerar o jogo...", next: 'reversum_end' }, { text: "Leônidas?", next: 'reversum_end' }]
     },
     'reversum_end': {
         isEndStory: true,
@@ -144,7 +146,7 @@ const storyDialogue = {
     },
     'post_reversum_victory': {
         character: 'Necroverso', image: 'necroversorevelado.png',
-        text: "Finalmente com eles derrotados o Inversum me pertence.",
+        text: "Finalmente com eles derrotados o Inversus me pertence.",
         options: [{ text: "Certo... e nosso acordo?", next: 'final_confrontation_1' }]
     },
     'final_confrontation_1': {
@@ -210,35 +212,19 @@ const typewriter = (element, text, onComplete) => {
 };
 
 const updateStoryStars = (character) => {
-    if (!dom.storyStarsBackgroundEl) return;
-    dom.storyStarsBackgroundEl.innerHTML = '';
-
     const characterColors = {
         'Necroverso': '#FFFFFF',
         'Contravox': '#52b788',
         'Versatrix': '#fca311',
         'Reversum': '#e63946',
     };
-
     const color = characterColors[character] || 'transparent';
-    if (color === 'transparent') return;
+    if (color === 'transparent') {
+        if (dom.storyStarsBackgroundEl) dom.storyStarsBackgroundEl.innerHTML = '';
+        return;
+    };
 
-    for(let i = 0; i < 100; i++) {
-        const star = document.createElement('div');
-        star.className = 'story-bg-star';
-        star.style.color = color;
-        const startX = `${Math.random() * 100}vw`, startY = `${Math.random() * 100}vh`;
-        const endX = `${Math.random() * 100}vw`, endY = `${Math.random() * 100}vh`;
-        star.style.setProperty('--start-x', startX);
-        star.style.setProperty('--start-y', startY);
-        star.style.setProperty('--end-x', endX);
-        star.style.setProperty('--end-y', endY);
-        star.style.top = startY;
-        star.style.left = startX;
-        star.style.animationDuration = `${Math.random() * 20 + 15}s`;
-        star.style.animationDelay = `-${Math.random() * 35}s`;
-        dom.storyStarsBackgroundEl.appendChild(star);
-    }
+    createStarryBackground(dom.storyStarsBackgroundEl, color, 100);
 };
 
 export const renderStoryNode = (nodeId) => {

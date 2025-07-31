@@ -41,13 +41,13 @@ export async function triggerNecroX(caster) {
 }
 
 /**
- * Triggers Contravox's "OÃSUFNOC" ability.
+ * Triggers Contravox's "!OÃSUFNOC!" ability.
  */
 export async function triggerContravox() {
     const { gameState } = getState();
-    updateLog("Contravox usa sua habilidade: OÃSUFNOC!");
+    updateLog("Contravox usa sua habilidade: !OÃSUFNOC!");
     playSoundEffect('confusao');
-    announceEffect("OÃSUFNOC", "reversus-total", 2000);
+    announceEffect("!OÃSUFNOC!", "reversus-total", 2000);
 
     dom.storyScreenFlashEl.style.backgroundColor = 'black';
     dom.storyScreenFlashEl.classList.remove('hidden');
@@ -191,42 +191,49 @@ export async function triggerFieldEffects() {
             
             // Yellow Space (Versatrix)
             if (space.color === 'yellow') {
-                if (gameState.versatrixPowerDisabled) {
-                    updateLog("Casa de Versatrix está inativa!");
-                    continue;
-                }
-                dom.versatrixFieldModal.classList.remove('hidden');
-                await new Promise(resolve => dom.versatrixFieldContinueButton.onclick = () => {
-                    dom.versatrixFieldModal.classList.add('hidden');
-                    resolve();
-                });
-
-                if (gameState.isFinalBoss) {
-                    updateLog(`${player.name} ativou uma Casa de Versatrix! Efeitos são aplicados a todos.`);
-
-                    const applyLoopingMovement = (p, move) => {
-                        if (!p || p.isEliminated) return;
-                        const oldPos = p.position;
-                        // Using modulo for clean wrap-around logic for the 1-10 board.
-                        const newPos = ((((oldPos - 1) + move) % 10) + 10) % 10 + 1;
-                        p.position = newPos;
-                        updateLog(`${p.name} moveu de ${oldPos} para ${p.position}.`);
-                    };
-
-                    const player1 = gameState.players['player-1'];
-                    const versatrix = Object.values(gameState.players).find(p => p.aiType === 'versatrix');
-                    const necros = Object.values(gameState.players).filter(p => p.aiType === 'necroverso_final');
-
-                    applyLoopingMovement(player1, 1);
-                    applyLoopingMovement(versatrix, 1);
-                    necros.forEach(necro => applyLoopingMovement(necro, -1));
-                } else { // Original Versatrix battle logic
-                    if (player.aiType === 'versatrix') {
+                if (gameState.currentStoryBattle === 'narrador') {
+                    if (player.aiType === 'narrador') {
                         player.position = Math.min(config.WINNING_POSITION, player.position + 1);
-                        updateLog(`Versatrix caiu em sua casa especial e avançou para ${player.position}.`);
-                    } else {
+                        updateLog(`Casa Amarela: Narrador avançou para ${player.position}.`);
+                    } else if (player.id === 'player-1') {
                         player.position = Math.max(1, player.position - 1);
-                        updateLog(`${player.name} caiu na casa de Versatrix e voltou para ${player.position}.`);
+                        updateLog(`Casa Amarela: Você voltou para ${player.position}.`);
+                    }
+                } else if (gameState.versatrixPowerDisabled) {
+                    updateLog("Casa de Versatrix está inativa!");
+                } else {
+                    dom.versatrixFieldModal.classList.remove('hidden');
+                    await new Promise(resolve => dom.versatrixFieldContinueButton.onclick = () => {
+                        dom.versatrixFieldModal.classList.add('hidden');
+                        resolve();
+                    });
+
+                    if (gameState.isFinalBoss) {
+                        updateLog(`${player.name} ativou uma Casa de Versatrix! Efeitos são aplicados a todos.`);
+
+                        const applyLoopingMovement = (p, move) => {
+                            if (!p || p.isEliminated) return;
+                            const oldPos = p.position;
+                            const newPos = ((((oldPos - 1) + move) % 10) + 10) % 10 + 1;
+                            p.position = newPos;
+                            updateLog(`${p.name} moveu de ${oldPos} para ${p.position}.`);
+                        };
+
+                        const player1 = gameState.players['player-1'];
+                        const versatrix = Object.values(gameState.players).find(p => p.aiType === 'versatrix');
+                        const necros = Object.values(gameState.players).filter(p => p.aiType === 'necroverso_final');
+
+                        applyLoopingMovement(player1, 1);
+                        applyLoopingMovement(versatrix, 1);
+                        necros.forEach(necro => applyLoopingMovement(necro, -1));
+                    } else { // Original Versatrix battle logic
+                        if (player.aiType === 'versatrix') {
+                            player.position = Math.min(config.WINNING_POSITION, player.position + 1);
+                            updateLog(`Versatrix caiu em sua casa especial e avançou para ${player.position}.`);
+                        } else {
+                            player.position = Math.max(1, player.position - 1);
+                            updateLog(`${player.name} caiu na casa de Versatrix e voltou para ${player.position}.`);
+                        }
                     }
                 }
                 renderBoard();

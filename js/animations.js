@@ -2,6 +2,36 @@ import * as dom from './dom.js';
 import * as config from './config.js';
 import { getState, updateState } from './state.js';
 import { shuffle } from './utils.js';
+import { playSoundEffect } from './sound.js';
+
+/**
+ * Creates a reusable starry background effect.
+ * @param {HTMLElement} container - The element to add the stars to.
+ * @param {string} [color='#FFFFFF'] - The color of the stars.
+ * @param {number} [starCount=100] - The number of stars to generate.
+ */
+export function createStarryBackground(container, color = '#FFFFFF', starCount = 100) {
+    if (!container) return;
+    container.innerHTML = ''; // Clear previous stars
+
+    for (let i = 0; i < starCount; i++) {
+        const star = document.createElement('div');
+        star.className = 'story-bg-star';
+        star.style.color = color;
+        const startX = `${Math.random() * 100}vw`, startY = `${Math.random() * 100}vh`;
+        const endX = `${Math.random() * 100}vw`, endY = `${Math.random() * 100}vh`;
+        star.style.setProperty('--start-x', startX);
+        star.style.setProperty('--start-y', startY);
+        star.style.setProperty('--end-x', endX);
+        star.style.setProperty('--end-y', endY);
+        star.style.top = startY;
+        star.style.left = startX;
+        star.style.animationDuration = `${Math.random() * 20 + 15}s`;
+        star.style.animationDelay = `-${Math.random() * 35}s`;
+        container.appendChild(star);
+    }
+}
+
 
 /**
  * Triggers the animation for the Necro X ability.
@@ -70,9 +100,9 @@ export const initializeFloatingItemsAnimation = (containerEl) => {
     }
 
     // Pool of card images
-    const imagePool = [...config.ALL_CARD_IMAGES];
-    if (achievements.has('contravox_win')) {
-        imagePool.push('cartacontravox.png');
+    const imagePool = [...config.BASE_CARD_IMAGES];
+    if (achievements.has('true_end_beta')) {
+        imagePool.push(...config.BOSS_CARD_IMAGES);
     }
 
     // Pool of effect names
@@ -158,51 +188,134 @@ export const toggleReversusTotalBackground = (isActive) => {
  * @returns {Promise<void>} A promise that resolves when the animation is complete.
  */
 export async function shatterImage(imageEl) {
-    const parent = imageEl.parentNode;
-    if (!parent) return;
+    if (!imageEl || !imageEl.parentNode) return;
+    
+    // Play sound immediately
+    playSoundEffect('destruido');
 
-    // Create a container for the particles at the same position as the image
-    const container = document.createElement('div');
-    container.className = 'shatter-container';
-    container.style.position = 'absolute';
-    const rect = imageEl.getBoundingClientRect();
-    const parentRect = parent.getBoundingClientRect();
-    container.style.left = `${rect.left - parentRect.left}px`;
-    container.style.top = `${rect.top - parentRect.top}px`;
-    container.style.width = `${rect.width}px`;
-    container.style.height = `${rect.height}px`;
+    // Wait for the next frame to ensure dimensions are available.
+    return new Promise(resolve => {
+        requestAnimationFrame(() => {
+            const parent = imageEl.parentNode;
+            const rect = imageEl.getBoundingClientRect();
 
-    parent.appendChild(container);
-    imageEl.style.opacity = '0'; // Hide the original image
+            // If the image isn't visible or has no size, we can't shatter it.
+            // Just resolve the promise after the sound has had time to play.
+            if (rect.width === 0 || rect.height === 0) {
+                console.warn('Shatter animation skipped: image has no dimensions.', imageEl);
+                setTimeout(resolve, 500); // Give sound time to play
+                return;
+            }
 
-    const particles = [];
-    const rows = 10, cols = 10;
+            // Create a container for the particles at the same position as the image
+            const container = document.createElement('div');
+            container.className = 'shatter-container';
+            container.style.position = 'absolute';
+            const parentRect = parent.getBoundingClientRect();
+            container.style.left = `${rect.left - parentRect.left}px`;
+            container.style.top = `${rect.top - parentRect.top}px`;
+            container.style.width = `${rect.width}px`;
+            container.style.height = `${rect.height}px`;
 
-    for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-            const particle = document.createElement('div');
-            particle.className = 'shatter-particle';
-            particle.style.backgroundImage = `url(${imageEl.src})`;
-            particle.style.backgroundPosition = `${c * 100 / (cols - 1)}% ${r * 100 / (rows - 1)}%`;
-            container.appendChild(particle);
-            particles.push(particle);
+            parent.appendChild(container);
+            imageEl.style.opacity = '0'; // Hide the original image
+
+            const particles = [];
+            const rows = 10, cols = 10;
+
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    const particle = document.createElement('div');
+                    particle.className = 'shatter-particle';
+                    particle.style.backgroundImage = `url(${imageEl.src})`;
+                    particle.style.backgroundPosition = `${c * 100 / (cols - 1)}% ${r * 100 / (rows - 1)}%`;
+                    container.appendChild(particle);
+                    particles.push(particle);
+                }
+            }
+
+            // Animate particles flying out in the next frame for performance
+            requestAnimationFrame(() => {
+                particles.forEach(p => {
+                    const x = (Math.random() - 0.5) * window.innerWidth * 1.5;
+                    const y = (Math.random() - 0.5) * window.innerHeight * 1.5;
+                    const rot = (Math.random() - 0.5) * 720;
+                    p.style.transform = `translate(${x}px, ${y}px) rotate(${rot}deg)`;
+                    p.style.opacity = '0';
+                });
+            });
+
+            // Wait for animation to finish then clean up
+            setTimeout(() => {
+                if (container.parentNode) {
+                    container.remove();
+                }
+                resolve();
+            }, 1500); // Corresponds to the animation duration in CSS
+        });
+    });
+}
+
+
+/**
+ * Shows a special victory animation for defeating Inversus.
+ */
+export function showInversusVictoryAnimation() {
+    // Hide game elements
+    dom.appContainerEl.classList.add('hidden');
+    dom.debugButton.classList.add('hidden');
+    dom.gameOverModal.classList.add('hidden');
+
+    // Reuse splash screen elements for the animation
+    const containerEl = dom.splashAnimationContainerEl;
+    dom.splashScreenEl.classList.remove('hidden');
+    containerEl.innerHTML = ''; // Clear previous animations
+    dom.splashScreenEl.querySelector('.splash-content').classList.add('hidden'); // Hide buttons/logo
+    
+    // Create the background
+    createStarryBackground(containerEl, '#FFFFFF', 150);
+
+    // Define items for the victory animation
+    const victoryCards = config.BOSS_CARD_IMAGES;
+    const victoryText = ['OÃSUFNOC', 'CAMPO VERSÁTIL', 'REVERSUS TOTAL', 'NECRO X'];
+    const itemsToCreate = [];
+    const totalItems = 25;
+
+    for (let i = 0; i < totalItems; i++) {
+        itemsToCreate.push({ type: Math.random() > 0.4 ? 'card' : 'text' });
+    }
+    shuffle(itemsToCreate);
+
+    // Create and animate the items
+    for (const itemConfig of itemsToCreate) {
+        const item = document.createElement('div');
+        item.classList.add('animated-item');
+
+        if (itemConfig.type === 'card') {
+            item.classList.add('card-shape');
+            const imageUrl = victoryCards[Math.floor(Math.random() * victoryCards.length)];
+            item.style.backgroundImage = `url('./${imageUrl}')`;
+            const size = Math.random() * 80 + 70; // 70px to 150px
+            item.style.width = `${size}px`;
+            item.style.height = `${size * 1.4}px`;
+        } else {
+            item.classList.add('text-shape');
+            const effectName = victoryText[Math.floor(Math.random() * victoryText.length)];
+            item.textContent = effectName;
+            item.style.fontSize = `${Math.random() * 2 + 1.5}rem`; // 1.5rem to 3.5rem
+            item.classList.add('reversus-total'); // Use a nice glow effect
         }
+
+        item.style.left = `${Math.random() * 100}vw`;
+        const duration = Math.random() * 20 + 10; // 10-30 seconds
+        item.style.animationDuration = `${duration}s`;
+        item.style.animationDelay = `-${Math.random() * duration}s`;
+        containerEl.appendChild(item);
     }
 
-    // Animate particles flying out
-    particles.forEach(p => {
-        const x = (Math.random() - 0.5) * window.innerWidth * 1.5;
-        const y = (Math.random() - 0.5) * window.innerHeight * 1.5;
-        const rot = (Math.random() - 0.5) * 720;
-        p.style.transform = `translate(${x}px, ${y}px) rotate(${rot}deg)`;
-        p.style.opacity = '0';
-    });
-
-    // Wait for animation to finish then clean up
-    return new Promise(resolve => {
-        setTimeout(() => {
-            container.remove();
-            resolve();
-        }, 1500);
-    });
+    // Return to main menu after a delay
+    setTimeout(() => {
+        dom.splashScreenEl.querySelector('.splash-content').classList.remove('hidden');
+        document.dispatchEvent(new Event('showSplashScreen'));
+    }, 15000); // Show animation for 15 seconds
 }

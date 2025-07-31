@@ -22,7 +22,7 @@ export const playSoundEffect = (effectName) => {
     if (soundState.muted || !dom.sfxPlayer) return;
 
     let sfxSrc;
-    const wavEffects = ['conquista', 'confusao', 'campoinverso', 'x'];
+    const wavEffects = ['conquista', 'confusao', 'campoinverso', 'x', 'destruido'];
     if (wavEffects.includes(effectName)) {
         sfxSrc = `${effectName}.wav`;
     } else {

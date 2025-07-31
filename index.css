@@ -32,6 +32,21 @@
 }
 
 /* --- KEYFRAMES --- */
+@keyframes green-glow-pulse {
+    0%, 100% { box-shadow: 0 0 15px 3px var(--accent-green), 0 0 5px 1px var(--accent-green) inset; }
+    50% { box-shadow: 0 0 25px 5px var(--accent-green), 0 0 8px 2px var(--accent-green) inset; }
+}
+
+@keyframes yellow-glow-pulse {
+    0%, 100% { box-shadow: 0 0 15px 3px var(--accent-yellow), 0 0 5px 1px var(--accent-yellow) inset; }
+    50% { box-shadow: 0 0 25px 5px var(--accent-yellow), 0 0 8px 2px var(--accent-yellow) inset; }
+}
+
+@keyframes red-glow-pulse {
+    0%, 100% { box-shadow: 0 0 15px 3px var(--accent-red), 0 0 5px 1px var(--accent-red) inset; }
+    50% { box-shadow: 0 0 25px 5px var(--accent-red), 0 0 8px 2px var(--accent-red) inset; }
+}
+
 @keyframes reversus-pulse {
     0% { box-shadow: 0 0 20px 5px var(--accent-red), inset 0 0 20px 2px var(--accent-red); }
     50% { box-shadow: 0 0 20px 5px var(--accent-blue), inset 0 0 20px 2px var(--accent-blue); }
@@ -39,9 +54,14 @@
 }
 
 @keyframes pulse-red {
-    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(230, 57, 70, 0.7); }
-    70% { transform: scale(1.05); box-shadow: 0 0 10px 10px rgba(230, 57, 70, 0); }
-    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(230, 57, 70, 0); }
+    0%, 100% {
+        transform: scale(1);
+        text-shadow: 0 0 5px var(--accent-red);
+    }
+    50% {
+        transform: scale(1.05);
+        text-shadow: 0 0 15px var(--accent-red), 0 0 20px var(--accent-red);
+    }
 }
 
 @keyframes fade-in-out {
@@ -231,6 +251,61 @@
     }
 }
 
+@keyframes inversus-glow-pulse {
+  0%   { filter: drop-shadow(0 0 15px var(--accent-red)); }
+  25%  { filter: drop-shadow(0 0 20px var(--accent-blue)); }
+  50%  { filter: drop-shadow(0 0 15px var(--accent-green)); }
+  75%  { filter: drop-shadow(0 0 20px var(--accent-yellow)); }
+  100% { filter: drop-shadow(0 0 15px var(--accent-red)); }
+}
+@keyframes inversus-scale-pulse {
+  0%, 100% {
+    transform: translateX(-50%) scale(1.0);
+  }
+  50% {
+    transform: translateX(-50%) scale(1.05);
+  }
+}
+
+@keyframes glitch-anim {
+  0% { clip-path: inset(45% 0 50% 0); }
+  5% { clip-path: inset(65% 0 15% 0); }
+  10% { clip-path: inset(40% 0 55% 0); }
+  15% { clip-path: inset(70% 0 25% 0); }
+  20% { clip-path: inset(50% 0 45% 0); }
+  25% { clip-path: inset(30% 0 60% 0); }
+  30% { clip-path: inset(80% 0 5% 0); }
+  35% { clip-path: inset(40% 0 50% 0); }
+  40% { clip-path: inset(60% 0 30% 0); }
+  45% { clip-path: inset(20% 0 70% 0); }
+  50% { clip-path: inset(55% 0 35% 0); }
+  55% { clip-path: inset(35% 0 55% 0); }
+  60% { clip-path: inset(75% 0 10% 0); }
+  65% { clip-path: inset(45% 0 45% 0); }
+  70% { clip-path: inset(65% 0 25% 0); }
+  75% { clip-path: inset(25% 0 65% 0); }
+  80% { clip-path: inset(50% 0 40% 0); }
+  85% { clip-path: inset(30% 0 65% 0); }
+  90% { clip-path: inset(70% 0 15% 0); }
+  95% { clip-path: inset(40% 0 50% 0); }
+  100% { clip-path: inset(55% 0 30% 0); }
+}
+
+@keyframes glitch-skew {
+  0% { transform: none; }
+  10% { transform: translate(2px, 1px) skewX(5deg); }
+  20% { transform: none; }
+  30% { transform: translate(-2px, -1px) skewX(-5deg); }
+  40% { transform: none; }
+  100% { transform: none; }
+}
+
+@keyframes monitor-flicker-anim {
+    0% { opacity: 1; }
+    50% { opacity: 0.95; }
+    100% { opacity: 1; }
+}
+
 
 /* --- GENERAL --- */
 body {
@@ -254,13 +329,13 @@ body.screen-shaking {
 #scalable-container {
     width: 100vw;
     height: 100vh;
-    transform: scale(0.9);
+    transform: scale(0.98);
     transition: transform 0.5s ease-in-out;
 }
 
 /* INVERSUS TOTAL SCREEN FLIP */
 #scalable-container.inversus-total-active {
-    transform: rotate(180deg) scale(0.9);
+    transform: rotate(180deg) scale(0.98);
 }
 
 /* --- NEW APP LAYOUT --- */
@@ -273,6 +348,32 @@ body.screen-shaking {
     background: none;
     border: none;
     box-shadow: none;
+    position: relative;
+    z-index: 1;
+}
+
+/* Monitor Effect for Narrator Battle */
+.app-container.effect-monitor {
+    animation: monitor-flicker-anim 0.2s infinite;
+}
+.app-container.effect-monitor::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background:
+        repeating-linear-gradient(
+            0deg,
+            rgba(0, 0, 0, 0.2) 0,
+            rgba(0, 0, 0, 0.2) 1px,
+            transparent 1px,
+            transparent 2px
+        ),
+        rgba(30, 150, 80, 0.15); /* Greenish tint */
+    pointer-events: none;
+    z-index: 2000;
 }
 
 .app-container.reversus-total-active {
@@ -316,7 +417,7 @@ body.screen-shaking {
 }
 #game-timer-container.countdown-warning {
     color: var(--accent-red);
-    animation: pulse-red 1s infinite;
+    animation: pulse-red 1.5s infinite ease-in-out;
 }
 
 
@@ -356,7 +457,8 @@ body.screen-shaking {
 .log-message.speaker-necroverso_tutorial,
 .log-message.speaker-necroverso,
 .log-message.speaker-necroverso_king,
-.log-message.speaker-necroverso_final {
+.log-message.speaker-necroverso_final,
+.log-message.speaker-narrador {
     color: #e0e0e0;
     text-shadow: 1px 1px 1px #000, -1px -1px 1px #000, 1px -1px 1px #000, -1px 1px 1px #000;
 }
@@ -683,7 +785,11 @@ body.screen-shaking {
 .player-area.p3-bg { background-color: #ddeadb; border-color: #c4d1c1; }
 .player-area.p4-bg { background-color: #fcf6d7; border-color: #e3dcb8; }
 
-.player-area-necro-tutorial { background-color: #696969; border-color: #4a4a4a; }
+.player-area-necro-tutorial,
+.narrator-portrait {
+    background-color: #696969;
+    border-color: #4a4a4a;
+}
 
 .player-area-necro-final { 
     background-color: black !important; /* Use important to override class-based colors */
@@ -698,6 +804,16 @@ body.screen-shaking {
     transform: scale(1.02);
 }
 
+.player-area.contravox-glow {
+    animation: green-glow-pulse 2s ease-in-out infinite;
+}
+.player-area.versatrix-glow {
+    animation: yellow-glow-pulse 2s ease-in-out infinite;
+}
+.player-area.reversum-glow {
+    animation: red-glow-pulse 2s ease-in-out infinite;
+}
+
 .player-header {
     display: flex;
     flex-direction: column;
@@ -708,7 +824,8 @@ body.screen-shaking {
     position: relative;
     z-index: 2; /* Ensure header is above portrait */
 }
-.player-area-necro-final .player-header {
+.player-area-necro-final .player-header,
+.narrator-portrait .player-header {
     border-bottom: 1px solid rgba(255,255,255,0.2);
 }
 
@@ -737,7 +854,11 @@ body.screen-shaking {
 .player-name.player-3 { color: var(--player-3-color); }
 .player-name.player-4 { color: var(--player-4-color); }
 .player-name.necro { color: #212121; }
-.player-area-necro-final .player-name.necro { color: var(--text-primary); text-shadow: 0 0 5px var(--accent-purple); }
+.player-area-necro-final .player-name.necro,
+.narrator-portrait .player-name.player-2 { /* Narrator uses p2 slot */
+    color: var(--text-primary);
+    text-shadow: 0 0 5px var(--accent-purple);
+}
 
 
 .field-effect-indicator {
@@ -803,7 +924,8 @@ body.screen-shaking {
     white-space: nowrap;
 }
 
-.player-area-necro-final .player-stats {
+.player-area-necro-final .player-stats,
+.narrator-portrait .player-stats {
     background: rgba(255,255,255,0.1);
 }
 
@@ -819,7 +941,8 @@ body.screen-shaking {
     font-size: 0.85rem; /* Reduced strong font size */
 }
 
-.player-area-necro-final .player-stats .stat-item strong {
+.player-area-necro-final .player-stats .stat-item strong,
+.narrator-portrait .player-stats .stat-item strong {
     color: var(--text-primary);
 }
 
@@ -851,7 +974,8 @@ body.screen-shaking {
     position: relative;
     z-index: 2; /* Ensure play-zone is above portrait */
 }
-.player-area-necro-final .play-zone {
+.player-area-necro-final .play-zone,
+.narrator-portrait .play-zone {
     background-color: rgba(255,255,255,0.1);
 }
 
@@ -881,7 +1005,8 @@ body.screen-shaking {
     position: relative;
     min-width: 0;
 }
-.player-area-necro-final .play-zone-slot {
+.player-area-necro-final .play-zone-slot,
+.narrator-portrait .play-zone-slot {
     border: 2px dashed rgba(255,255,255,0.2);
 }
 
@@ -893,12 +1018,16 @@ body.screen-shaking {
     text-align: center;
 }
 
+.narrator-portrait .play-zone-slot:not(:has(.card))::before {
+    color: rgba(255,255,255,0.4);
+}
+
 /* Story Battle Character Portrait */
 .player-area-character-portrait {
     position: absolute;
     bottom: 5px;
     left: 50%;
-    transform: translateX(-50%);
+    transform: translateX(-50%) scale(1.8);
     width: 90%;
     height: auto;
     max-height: 70%;
@@ -909,7 +1038,45 @@ body.screen-shaking {
     z-index: 1;
     filter: drop-shadow(2px 2px 5px rgba(0,0,0,0.5));
 }
+.player-area-character-portrait.effect-glitch {
+    animation: glitch-skew 1s infinite linear alternate-reverse;
+}
+.player-area-character-portrait.effect-glitch::before,
+.player-area-character-portrait.effect-glitch::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: inherit; /* Inherit the background of the parent (the player area div) */
+    background-image: url('../narrador.png'); /* Use specific image for glitch */
+    background-size: cover;
+    background-position: center;
+    z-index: 2; /* Place it above the main image */
+}
+.player-area-character-portrait.effect-glitch::before {
+    animation: glitch-anim 1s infinite linear alternate-reverse;
+}
+.player-area-character-portrait.effect-glitch::after {
+    animation: glitch-anim 1s infinite linear alternate-reverse;
+    animation-delay: -0.5s;
+}
 
+.inversus-character-portrait {
+  position: absolute;
+  bottom: 5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  height: auto;
+  max-height: 70%;
+  object-fit: contain;
+  object-position: bottom center;
+  pointer-events: none;
+  z-index: 1;
+  animation: inversus-glow-pulse 4s infinite ease-in-out, inversus-scale-pulse 2.5s infinite ease-in-out;
+}
 
 /* --- CARDS --- */
 .card {
@@ -937,7 +1104,11 @@ body.screen-shaking {
     cursor: default;
 }
 
-.player-hand .card:hover { transform: translateY(-20px) scale(1.2); box-shadow: 0 16px 30px rgba(0,0,0,0.5); z-index: 100; }
+.player-hand .card:hover {
+    transform: translateY(-30px) scale(1.6);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+    z-index: 100;
+}
 .card.selected { transform: translateY(-8px); border-color: var(--accent-yellow); box-shadow: 0 0 10px var(--accent-yellow); }
 
 .card.reversus-total-card {
@@ -1050,6 +1221,31 @@ body.screen-shaking {
     width: 300px;
     margin-bottom: 2rem;
     animation: splash-logo-spin 16s linear infinite;
+    cursor: pointer;
+    position: relative; /* For glitch effect */
+}
+.splash-logo.effect-glitch {
+    animation: glitch-skew 1s infinite linear alternate-reverse;
+}
+.splash-logo.effect-glitch::before,
+.splash-logo.effect-glitch::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: url('../logo.png'); /* Use specific image for glitch */
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+}
+.splash-logo.effect-glitch::before {
+    animation: glitch-anim 1s infinite linear alternate-reverse;
+}
+.splash-logo.effect-glitch::after {
+    animation: glitch-anim 1s infinite linear alternate-reverse;
+    animation-delay: -0.5s;
 }
 
 .splash-button-container {
@@ -1079,7 +1275,7 @@ body.screen-shaking {
     bottom: -150px;
     animation: drift linear infinite;
     pointer-events: none;
-    opacity: 1;
+    opacity: 0.7;
 }
 @keyframes drift {
     0% {
@@ -1297,13 +1493,13 @@ body.screen-shaking {
 }
 
 .story-character-img {
-    max-height: 90vh;
-    max-width: 600px;
+    max-height: 95vh;
+    max-width: 900px;
     object-fit: contain;
     position: absolute;
     top: 50%;
     left: 50%;
-    transform: translate(-50%, -50%);
+    transform: translate(-50%, -50%) scale(1.5);
     z-index: 3;
 }
 
@@ -1370,7 +1566,7 @@ body.screen-shaking {
 }
 
 /* --- Debug & Sound --- */
-#debug-button, .sound-button {
+#debug-button {
     position: fixed;
     bottom: 10px;
     right: 10px;
@@ -1393,41 +1589,81 @@ body.screen-shaking {
     right: 10px;
     z-index: 2000;
     display: flex;
-    gap: 10px;
+    gap: 0;
     align-items: center;
+    background-color: rgba(11, 19, 26, 0.7);
+    border: 1px solid rgba(168, 218, 220, 0.2);
+    border-radius: 20px;
+    padding: 5px;
+    backdrop-filter: blur(5px);
 }
 #fullscreen-button {
     position: fixed;
     top: 10px;
     left: 10px;
     z-index: 2000;
+    background-color: rgba(11, 19, 26, 0.7);
+    border: 1px solid rgba(168, 218, 220, 0.2);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
 }
-.sound-button { position: static; }
-.sound-button.muted { background-color: var(--accent-red); }
+#fullscreen-button svg {
+    fill: var(--text-primary);
+    width: 20px;
+    height: 20px;
+    transition: transform 0.2s ease-in-out;
+}
+#fullscreen-button:hover svg {
+    transform: scale(1.1);
+}
+.sound-button {
+    position: static;
+    background: transparent;
+    border: none;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    color: var(--text-primary);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.sound-button.muted {
+    background-color: var(--accent-red);
+}
 #volume-slider {
     -webkit-appearance: none;
     appearance: none;
-    width: 100px;
-    height: 8px;
+    width: 80px;
+    height: 5px;
     background: rgba(255,255,255,0.3);
     border-radius: 5px;
     outline: none;
     opacity: 0.7;
     transition: opacity .2s;
+    margin: 0 8px;
 }
 #volume-slider:hover { opacity: 1; }
 #volume-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 18px;
-    height: 18px;
+    width: 15px;
+    height: 15px;
     background: var(--text-primary);
     cursor: pointer;
     border-radius: 50%;
 }
 #volume-slider::-moz-range-thumb {
-    width: 18px;
-    height: 18px;
+    width: 15px;
+    height: 15px;
     background: var(--text-primary);
     cursor: pointer;
     border-radius: 50%;
