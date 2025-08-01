@@ -1,15 +1,15 @@
 
 
-
 import * as config from './config.js';
 import * as dom from './dom.js';
 import { getState, updateState } from './state.js';
 import { renderAll, updateTurnIndicator, showTurnIndicator, showRoundSummaryModal, renderPlayerArea, renderBoard, showGameOver, renderCard, showSplashScreen } from './ui.js';
 import { playStoryMusic, stopStoryMusic, announceEffect, playSoundEffect } from './sound.js';
-import { triggerFieldEffects, tryToSpeak } from './story-abilities.js';
+import { triggerFieldEffects, tryToSpeak, triggerNecroX } from './story-abilities.js';
 import { updateLog, shuffle, createDeck } from './utils.js';
 import { grantAchievement } from './achievements.js';
-import { animateNecroX, showInversusVictoryAnimation } from './animations.js';
+import { animateCardPlay, showInversusVictoryAnimation, toggleReversusTotalBackground } from './animations.js';
+import { getGeminiAiMove } from './gemini-ai.js';
 
 /**
  * Updates the in-game timer display, handling normal and countdown modes.
@@ -87,8 +87,8 @@ const generateBoardPaths = (options = {}) => {
         shuffle(colorableSpaceIds);
         let currentSpaceIndex = 0;
 
-        // Black holes for final boss
-        if (options.isFinalBoss) {
+        // Black holes for final boss or king battle
+        if (options.isFinalBoss || options.storyBattle === 'necroverso_king') {
             let numBlackHoles;
             if (options.storyBattle === 'necroverso_king') {
                 numBlackHoles = 1; // Exactly one for the 1v3 battle.
@@ -103,6 +103,16 @@ const generateBoardPaths = (options = {}) => {
             }
         }
         
+        // Star spaces for Xael Challenge
+        if (options.isXaelChallenge) {
+            const numStarSpaces = 1;
+            for (let k = 0; k < numStarSpaces && currentSpaceIndex < colorableSpaceIds.length; k++) {
+                const spaceToStar = spaces.find(s => s.id === colorableSpaceIds[currentSpaceIndex]);
+                if (spaceToStar) spaceToStar.color = 'star';
+                currentSpaceIndex++;
+            }
+        }
+
         // Red, Blue, and Yellow for Narrator battle
         if (options.storyBattle === 'narrador') {
             const colors = ['red', 'blue', 'yellow'];
@@ -168,7 +178,7 @@ export const initializeGame = async (mode, options) => {
         }
     }
     
-    let playerIdsInGame, numPlayers, modeText, isStoryMode = false, isFinalBoss = false, storyBattle = null, storyBattleType = null, isInversusMode = false;
+    let playerIdsInGame, numPlayers, modeText, isStoryMode = false, isFinalBoss = false, storyBattle = null, storyBattleType = null, isInversusMode = false, isXaelChallenge = false;
 
     if (mode === 'inversus') {
         isInversusMode = true;
@@ -199,6 +209,7 @@ export const initializeGame = async (mode, options) => {
         numPlayers = playerIdsInGame.length;
         storyBattleType = options.story.type || null;
         isFinalBoss = storyBattle === 'necroverso_final' || storyBattle === 'necroverso_king';
+        isXaelChallenge = storyBattle === 'xael_challenge';
         
         switch(storyBattle) {
             case 'contravox': modeText = 'Modo História: Contravox'; playStoryMusic('contravox.ogg'); break;
@@ -207,6 +218,7 @@ export const initializeGame = async (mode, options) => {
             case 'necroverso_king': modeText = 'Modo História: Rei Necroverso'; playStoryMusic('necroverso.ogg'); break;
             case 'necroverso_final': modeText = 'Modo História: Necroverso Final'; playStoryMusic('necroversofinal.ogg'); break;
             case 'narrador': modeText = 'Batalha Secreta: Narrador'; playStoryMusic('narrador.ogg'); break;
+            case 'xael_challenge': modeText = 'Desafio: Xael'; playStoryMusic('xaeldesafio.ogg'); break;
             default: modeText = `Modo História: ${storyBattle}`; stopStoryMusic();
         }
     } else {
@@ -228,8 +240,9 @@ export const initializeGame = async (mode, options) => {
 
 
     dom.gameSetupModal.classList.add('hidden');
-    dom.pvpLobbyModal.classList.add('hidden');
     dom.storyModeModalEl.classList.add('hidden');
+    dom.pvpRoomListModal.classList.add('hidden');
+    dom.pvpLobbyModal.classList.add('hidden');
     dom.appContainerEl.classList.remove('blurred', 'hidden');
     dom.reversusTotalIndicatorEl.classList.add('hidden');
     dom.debugButton.classList.remove('hidden');
@@ -289,12 +302,17 @@ export const initializeGame = async (mode, options) => {
                     necroX: true
                 };
             }
+            if (isXaelChallenge) {
+                playerObject.stars = 0;
+                playerObject.hasXaelStarPower = (id === 'player-1');
+                playerObject.xaelStarPowerCooldown = 0;
+            }
             return [id, playerObject];
         })
     );
     
-    const boardPaths = generateBoardPaths({ storyBattle, isFinalBoss });
-    if (!isFinalBoss && !isInversusMode) {
+    const boardPaths = generateBoardPaths({ storyBattle, isFinalBoss, isXaelChallenge });
+    if (!isFinalBoss && !isInversusMode && !isXaelChallenge) {
         playerIdsInGame.forEach((id, index) => { 
             if(boardPaths[index]) boardPaths[index].playerId = id; 
         });
@@ -310,6 +328,7 @@ export const initializeGame = async (mode, options) => {
         isStoryMode,
         isInversusMode,
         isFinalBoss,
+        isXaelChallenge,
         necroversoHearts: 3,
         currentStoryBattle: storyBattle,
         storyBattleType: storyBattleType,
@@ -332,7 +351,9 @@ export const initializeGame = async (mode, options) => {
         versatrixPowerDisabled: false,
         reversumAbilityUsedThisRound: false,
         necroXUsedThisRound: false,
-        dialogueState: { spokenLines: new Set() } // Initialize dialogue state
+        dialogueState: { spokenLines: new Set() }, // Initialize dialogue state
+        player1CardsObscured: false, // For Contravox ability
+        xaelChallengeOffered: false, // For secret Xael challenge
     };
     
     if (isFinalBoss) {
@@ -365,15 +386,15 @@ export const initializeGame = async (mode, options) => {
     await initiateGameStartSequence();
 };
 
-export const initiateGameStartSequence = async () => {
+export async function initiateGameStartSequence() {
     const { gameState } = getState();
     if (gameState.isInversusMode) {
         await startNewRound(true);
         return;
     }
     
-    // Skip initial draw for the final battle
-    if (gameState.isFinalBoss) {
+    // Skip initial draw for the final battle or Xael challenge
+    if (gameState.isFinalBoss || gameState.isXaelChallenge) {
         // Set paths once at the start
         const chosenPaths = new Set();
         const playerIdsToAssign = gameState.playerIdsInGame;
@@ -408,7 +429,7 @@ export const initiateGameStartSequence = async () => {
     await drawToStart();
 };
 
-const drawToStart = async () => {
+async function drawToStart() {
     const { gameState } = getState();
     if (gameState.decks.value.length < gameState.playerIdsInGame.length) {
         updateLog("Reabastecendo o baralho de valor.");
@@ -459,7 +480,7 @@ const drawToStart = async () => {
     }
 };
 
-const finalizeGameStart = async () => {
+async function finalizeGameStart() {
     const { gameState } = getState();
     
     if (gameState.initialDrawCards) {
@@ -472,61 +493,53 @@ const finalizeGameStart = async () => {
     await startNewRound(true);
 };
 
-export const applyEffect = (card, targetId, casterName, effectTypeToReverse) => {
+export function applyEffect(card, targetId, casterName, effectTypeToReverse) {
     const { gameState } = getState();
     const target = gameState.players[targetId];
     if (!target) return;
-    
+
     let effectName = card.name;
 
-    if(gameState.activeFieldEffects.some(fe => fe.name === 'Imunidade' && fe.appliesTo === targetId) && (effectName === 'Menos' || effectName === 'Desce')){
+    if (gameState.activeFieldEffects.some(fe => fe.name === 'Imunidade' && fe.appliesTo === targetId) && (effectName === 'Menos' || effectName === 'Desce')) {
         updateLog(`${target.name} está imune a ${effectName} nesta rodada!`);
         return;
     }
-    
+
     const getInverseEffect = (effect) => {
-        if (effect === 'Mais') return 'Menos';
-        if (effect === 'Menos') return 'Mais';
-        if (effect === 'Sobe') return 'Desce';
-        if (effect === 'Desce') return 'Sobe';
-        if (effect === 'NECRO X') return 'NECRO X Invertido';
-        if (effect === 'NECRO X Invertido') return 'NECRO X';
-        return null;
+        const map = { 'Mais': 'Menos', 'Menos': 'Mais', 'Sobe': 'Desce', 'Desce': 'Sobe', 'NECRO X': 'NECRO X Invertido', 'NECRO X Invertido': 'NECRO X' };
+        return map[effect] || null;
     };
-    
-    if(gameState.reversusTotalActive && effectName !== 'Reversus Total') {
-         const inverted = getInverseEffect(effectName);
-         if (inverted) {
+
+    if (gameState.reversusTotalActive && effectName !== 'Reversus Total') {
+        const inverted = getInverseEffect(effectName);
+        if (inverted) {
             updateLog(`Reversus Total inverteu ${card.name} para ${inverted}!`);
             effectName = inverted;
-         }
-    }
-
-    // Announce "Reversus Individual" specifically if a card is locked.
-    if (card.isLocked) {
-         announceEffect("REVERSUS INDIVIDUAL!", 'reversus');
-    } else if (card.name !== 'Carta da Versatrix') { // Don't announce the secret card
-        announceEffect(effectName);
+        }
     }
     
-    switch(effectName) {
+    if (card.isLocked) {
+        announceEffect("REVERSUS INDIVIDUAL!", 'reversus');
+    } else if (card.name !== 'Carta da Versatrix' && !['Reversus', 'Reversus Total'].includes(card.name)) {
+        announceEffect(effectName);
+    }
+
+    switch (effectName) {
         case 'Mais': case 'Menos': case 'NECRO X': case 'NECRO X Invertido':
             target.effects.score = effectName;
             break;
         case 'Sobe': case 'Desce': case 'Pula':
-            if (target.effects.movement === 'Pula' && effectName === 'Pula') {
-                updateLog(`${target.name} já estava sob efeito de Pula. O novo efeito irá sobrescrever o anterior.`);
-            }
             target.effects.movement = effectName;
             break;
         case 'Reversus': {
+            announceEffect('Reversus!', 'reversus');
             if (effectTypeToReverse === 'score') {
                 target.effects.score = getInverseEffect(target.effects.score);
                 updateLog(`${casterName} usou ${card.name} em ${target.name} para reverter efeito de pontuação para ${target.effects.score || 'Nenhum'}.`);
             } else if (effectTypeToReverse === 'movement') {
                 if (target.effects.movement === 'Pula') {
-                     target.effects.movement = null;
-                     updateLog(`${casterName} anulou o efeito 'Pula' de ${target.name} com Reversus!`);
+                    target.effects.movement = null;
+                    updateLog(`${casterName} anulou o efeito 'Pula' de ${target.name} com Reversus!`);
                 } else {
                     target.effects.movement = getInverseEffect(target.effects.movement);
                     updateLog(`${casterName} usou ${card.name} em ${target.name} para reverter efeito de movimento para ${target.effects.movement || 'Nenhum'}.`);
@@ -535,1236 +548,569 @@ export const applyEffect = (card, targetId, casterName, effectTypeToReverse) => 
             return;
         }
         case 'Reversus Total': {
+            announceEffect('Reversus Total!', 'reversus-total');
+            playSoundEffect('reversustotal');
+            toggleReversusTotalBackground(true);
             gameState.reversusTotalActive = true;
             dom.appContainerEl.classList.add('reversus-total-active');
             dom.reversusTotalIndicatorEl.classList.remove('hidden');
             Object.values(gameState.players).forEach(p => {
-                // Find the card currently occupying the score slot.
-                const scoreEffectCard = p.playedCards.effect.find(c => 
-                    ['Mais', 'Menos', 'NECRO X', 'NECRO X Invertido'].includes(c.name) || 
-                    (c.name === 'Reversus' && c.reversedEffectType === 'score')
-                );
-                
-                // If there's a score effect active AND the card in the slot is NOT locked, invert the effect.
+                const scoreEffectCard = p.playedCards.effect.find(c => ['Mais', 'Menos', 'NECRO X', 'NECRO X Invertido'].includes(c.name) || (c.name === 'Reversus' && c.reversedEffectType === 'score'));
                 if (p.effects.score && (!scoreEffectCard || !scoreEffectCard.isLocked)) {
                     p.effects.score = getInverseEffect(p.effects.score);
                 }
-
-                // Find the card currently occupying the movement slot.
-                const moveEffectCard = p.playedCards.effect.find(c =>
-                    ['Sobe', 'Desce', 'Pula'].includes(c.name) ||
-                    (c.name === 'Reversus' && c.reversedEffectType === 'movement')
-                );
-                
-                // If there's a movement effect active AND it's not locked, invert it.
-                // Pula is not affected by global Reversus Total.
+                const moveEffectCard = p.playedCards.effect.find(c => ['Sobe', 'Desce', 'Pula'].includes(c.name) || (c.name === 'Reversus' && c.reversedEffectType === 'movement'));
                 if (p.effects.movement && p.effects.movement !== 'Pula' && (!moveEffectCard || !moveEffectCard.isLocked)) {
                     p.effects.movement = getInverseEffect(p.effects.movement);
                 }
             });
-            updateLog(`${casterName} usou REVERSUS TOTAL! Todos os efeitos não travados foram invertidos!`);
+            updateLog(`${casterName} ativou o Reversus Total!`);
+            
+            // XAEL POPUP TRIGGER
+            if (gameState.isStoryMode && !gameState.xaelChallengeOffered && !gameState.isInversusMode) {
+                gameState.xaelChallengeOffered = true; // Mark as offered to prevent repeats
+                setTimeout(() => {
+                    playSoundEffect('xael');
+                    dom.xaelPopup.classList.remove('hidden');
+                    updateLog("Um Desafiante secreto apareceu!");
+                }, 1000); // 1 second delay
+            }
             return;
         }
+        case 'Carta da Versatrix':
+            target.effects.score = 'Mais';
+            updateLog(`${casterName} usou a ${card.name} em ${target.name}, garantindo o efeito 'Mais'.`);
+            break;
     }
-    if (effectName !== 'Carta da Versatrix') {
-        updateLog(`${casterName} usou ${effectName} em ${target.name}.`);
-    }
-};
 
-const animateCardPlay = (card, fromPlayerId, toPlayerId) => {
+    if (card.name === 'Pula') {
+        updateLog(`${casterName} usou ${card.name} em ${target.name}.`);
+    } else if (card.name !== 'Reversus' && card.name !== 'Reversus Total' && card.name !== 'Carta da Versatrix') {
+        updateLog(`${casterName} usou ${card.name} em ${target.name} para aplicar o efeito ${effectName}.`);
+    }
+}
+
+export async function playCard(player, card, targetId, effectTypeToReverse = null, options = {}) {
     const { gameState } = getState();
-    const fromEl = document.getElementById(`hand-${fromPlayerId}`);
-    const toEl = document.getElementById(`play-zone-${toPlayerId}`);
-    if (!fromEl || !toEl) {
-        console.warn("Animation failed: element not found.");
-        renderAll();
-        return;
-    };
 
-    const fromRect = fromEl.getBoundingClientRect();
-    const toRect = toEl.getBoundingClientRect();
+    // 1. Determine animation target and where the card will be stored.
+    let animationTargetPlayerId = player.id;
+    let cardDestinationPlayer = player;
 
-    const clone = document.createElement('div');
-    clone.innerHTML = renderCard(card, 'play-zone', toPlayerId);
-    const cardClone = clone.firstElementChild;
-    if(!cardClone) return;
-
-    cardClone.classList.add('card-animation-clone');
-    cardClone.style.left = `${fromRect.left + fromRect.width / 2 - 40}px`;
-    cardClone.style.top = `${fromRect.top + fromRect.height / 2 - 55}px`;
-    
-    document.body.appendChild(cardClone);
-
-    requestAnimationFrame(() => {
-        cardClone.style.left = `${toRect.left + (toRect.width / 2) - 40}px`;
-        cardClone.style.top = `${toRect.top + (toRect.height / 2) - 55}px`;
-        cardClone.style.transform = 'scale(1)';
-    });
-
-    setTimeout(() => {
-        cardClone.remove();
-        renderAll();
-    }, 600);
-};
-
-
-export const playCard = (caster, card, effectTargetId, effectTypeToReverse, options = {}) => {
-    const { gameState } = getState();
-    caster.hand = caster.hand.filter(c => c.id !== card.id);
-    gameState.playedAnyCardThisTurn = true;
-    
-    let cardToPlay = card;
-    // Special handling for the new Reversus Individual flow
-    if (options.isIndividualLock && options.effectNameToApply) {
-        // Return the actual 'Reversus Total' card to the deck
-        gameState.decks.effect.push(card);
-        
-        // Create a new, locked effect card to be played on the board
-        cardToPlay = {
-            id: Date.now() + Math.random(),
-            type: 'effect',
-            name: options.effectNameToApply,
-            isLocked: true,
-            casterId: caster.id
-        };
-        updateLog(`${caster.name} usou Reversus Individual para aplicar e travar o efeito '${cardToPlay.name}'.`);
-    } else if (card.name === 'Reversus') {
-        card.reversedEffectType = effectTypeToReverse;
+    if (card.type === 'effect') {
+        // Effect cards are animated to the target and stored in the target's played cards.
+        animationTargetPlayerId = targetId;
+        cardDestinationPlayer = gameState.players[targetId];
     }
 
-    if (caster.isHuman) {
-        dom.endTurnButton.disabled = false;
+    // Exception: 'Reversus Total' is a global effect. It is animated to and stored in the caster's area.
+    if (card.name === 'Reversus Total' && !options.isIndividualLock) {
+        animationTargetPlayerId = player.id;
+        cardDestinationPlayer = player;
     }
 
-    if (cardToPlay.type === 'value') {
-        animateCardPlay(cardToPlay, caster.id, caster.id);
-        if (caster.playedCards.value.length < 2) {
-            caster.playedCards.value.push(cardToPlay);
-        }
-        caster.nextResto = cardToPlay;
-        caster.playedValueCardThisTurn = true;
-        updateLog(`${caster.name} jogou a carta de valor ${cardToPlay.name}.`);
-    } else if (cardToPlay.name === 'Carta da Versatrix') {
-        updateLog(`Você usou a Carta da Versatrix!`);
-        playSoundEffect('conquista'); // Re-use a positive sound
-        for (let i = 0; i < 2; i++) {
-            if (gameState.decks.effect.length > 0) {
-                const newCard = gameState.decks.effect.pop();
-                caster.hand.push(newCard);
-                updateLog(`Você comprou: ${newCard.name}.`);
-            }
-        }
-        // This card is consumed and does not go to the play zone or deck.
-    } else if (cardToPlay.type === 'effect' && effectTargetId) {
-        cardToPlay.casterId = caster.id;
-        
-        let finalTargetIds = [effectTargetId];
-        const primaryTargetPlayer = gameState.players[effectTargetId];
-        
-        // Logic for 1v3 king battle spread
-        const is1v3Battle = gameState.storyBattleType === '1v3_king';
-        const necroIds = ['player-2', 'player-3', 'player-4'];
-        if (is1v3Battle && card.name !== 'Pula') {
-            if (caster.id === 'player-1' && necroIds.includes(effectTargetId)) {
-                finalTargetIds = [...necroIds];
-                updateLog(`Efeito de ${card.name} se espalha para todos os Necroversos!`);
-            } else if (necroIds.includes(caster.id) && necroIds.includes(effectTargetId)) {
-                finalTargetIds = [...necroIds];
-                 updateLog(`Efeito de ${card.name} de Necroverso se espalha para seus aliados!`);
-            }
-        }
-        
-        if (!primaryTargetPlayer) {
-            console.error("Invalid primary target player in playCard");
-            return;
-        }
-        
-        animateCardPlay(cardToPlay, caster.id, primaryTargetPlayer.id);
+    // 2. Find the card element in the hand to start the animation from.
+    const startCardElement = document.querySelector(`#hand-${player.id} [data-card-id="${card.id}"]`);
 
-        const getEffectCategory = (cardName, reversedType) => {
-            if (['Mais', 'Menos', 'NECRO X', 'NECRO X Invertido'].includes(cardName)) return 'score';
-            if (['Sobe', 'Desce', 'Pula'].includes(cardName)) return 'movement';
-            if (cardName === 'Reversus') return reversedType; // Uses the explicit reverse type
-            if (cardName === 'Reversus Total' && !options.isIndividualLock) return 'total';
-            return null;
-        };
+    // 3. Determine the target slot label in the destination player's area.
+    let targetSlotLabel = '';
+    if (card.type === 'value') {
+        targetSlotLabel = cardDestinationPlayer.playedCards.value.length === 0 ? 'Valor 1' : 'Valor 2';
+    } else { // Effect cards
+        const scoreEffects = ['Mais', 'Menos', 'NECRO X', 'NECRO X Invertido', 'Carta da Versatrix'];
+        // Use the locked effect name if applicable, otherwise the card's name
+        const effectNameForSlot = options.isIndividualLock ? options.effectNameToApply : card.name;
 
-        const newCardCategory = getEffectCategory(cardToPlay.name, effectTypeToReverse);
-        
-        if (newCardCategory && newCardCategory !== 'total') {
-            const existingCardIndex = primaryTargetPlayer.playedCards.effect.findIndex(c => getEffectCategory(c.name, c.reversedEffectType) === newCardCategory);
-            
-            if (existingCardIndex !== -1) {
-                const existingCard = primaryTargetPlayer.playedCards.effect[existingCardIndex];
-                if (existingCard.isLocked) {
-                    updateLog(`Efeito de ${primaryTargetPlayer.name} está travado e não pode ser alterado!`);
-                    // AI LOOP FIX: If the caster is an AI, don't return the card. 
-                    // This effectively makes them discard it.
-                    if (!caster.isHuman) {
-                        updateLog(`${caster.name} tentou uma jogada inválida e descartou ${card.name}.`);
-                    } else {
-                        // For human players, return the card to their hand.
-                        if (!options.effectNameToApply) caster.hand.push(card);
-                    }
-                    renderAll();
-                    return;
-                }
-                const [removedCard] = primaryTargetPlayer.playedCards.effect.splice(existingCardIndex, 1);
-                gameState.decks.effect.push(removedCard);
-            }
-        }
-        
-        primaryTargetPlayer.playedCards.effect.push(cardToPlay);
-        
-        for (const targetId of finalTargetIds) {
-             applyEffect(cardToPlay, targetId, caster.name, effectTypeToReverse);
+        if (scoreEffects.includes(effectNameForSlot) || (effectNameForSlot === 'Reversus' && effectTypeToReverse === 'score')) {
+            targetSlotLabel = 'Pontuação';
+        } else if (['Sobe', 'Desce', 'Pula'].includes(effectNameForSlot) || (effectNameForSlot === 'Reversus' && effectTypeToReverse === 'movement')) {
+            targetSlotLabel = 'Movimento';
+        } else if (effectNameForSlot === 'Reversus Total' && !options.isIndividualLock) {
+             targetSlotLabel = 'Reversus T.';
         }
     }
     
-    if (caster.isHuman) {
-        gameState.selectedCard = null;
-        updateState('reversusTotalIndividualFlow', false);
-    }
-};
-
-
-const getAiTurnDecision = (aiPlayer) => {
-    const { gameState } = getState();
-    const actions = [];
-    const playerIds = gameState.playerIdsInGame;
-    
-    let myTeamIds, opponentIds;
-
-    // --- Narrator AI ---
-    if (aiPlayer.aiType === 'narrador') {
-        const player1 = gameState.players['player-1'];
-        // Use abilities once per game
-        if (aiPlayer.narratorAbilities.confusion && Math.random() < 0.33) {
-            actions.push({ action: 'use_narrator_ability', ability: 'confusion' });
-            aiPlayer.narratorAbilities.confusion = false;
-        } else if (aiPlayer.narratorAbilities.reversus && Math.random() < 0.5) {
-             actions.push({ action: 'use_narrator_ability', ability: 'reversus' });
-             aiPlayer.narratorAbilities.reversus = false;
-        } else if (aiPlayer.narratorAbilities.necroX && aiPlayer.resto?.value >= 6) {
-             actions.push({ action: 'use_narrator_ability', ability: 'necroX' });
-             aiPlayer.narratorAbilities.necroX = false;
-        }
-
-        // Play cards smartly
-        const valueCardsInHand = aiPlayer.hand.filter(c => c.type === 'value');
-        if (!aiPlayer.playedValueCardThisTurn && valueCardsInHand.length >= 2) {
-             actions.push({ action: 'play', cardId: valueCardsInHand[valueCardsInHand.length - 1].id, card: valueCardsInHand[valueCardsInHand.length - 1] });
-        }
-        const effectCardsInHand = aiPlayer.hand.filter(c => c.type === 'effect');
-        if (effectCardsInHand.length > 0) {
-            const cardToPlay = effectCardsInHand[0];
-            let target = aiPlayer.id; // Default self-target
-            if (['Menos', 'Desce', 'Pula'].includes(cardToPlay.name)) {
-                target = 'player-1';
-            }
-            actions.push({ action: 'play', cardId: cardToPlay.id, card: cardToPlay, target });
-        }
-        return { actions };
+    // 4. Animate the card play.
+    if (startCardElement && targetSlotLabel) {
+        await animateCardPlay(card, startCardElement, animationTargetPlayerId, targetSlotLabel);
     }
 
-    // --- Versatrix Ally Logic ---
-    if (gameState.storyBattleType === '1v3_king' && aiPlayer.aiType === 'versatrix') {
-        const player1 = gameState.players['player-1'];
-        const otherNecros = ['player-2', 'player-3'].map(id => gameState.players[id]);
+    // --- State modifications after animation ---
 
-        // Prioritize helping player 1 or harming other necros
-        const availableEffectCards = aiPlayer.hand.filter(c => c.type === 'effect');
-        if(availableEffectCards.length > 0) {
-            const card = shuffle(availableEffectCards)[0];
-            let targetId, effectTypeTarget;
-            switch(card.name) {
-                case 'Mais':
-                case 'Sobe':
-                    targetId = 'player-1'; // Always buff player 1
-                    break;
-                case 'Menos':
-                case 'Desce':
-                case 'Pula':
-                    targetId = shuffle(otherNecros)[0].id; // Always debuff another Necro
-                    break;
-                case 'Reversus':
-                    // Harm another necro if they have a good effect
-                    const necroToHarm = otherNecros.find(p => p.effects.score === 'Mais' || p.effects.movement === 'Sobe');
-                    if (necroToHarm) {
-                        targetId = necroToHarm.id;
-                        effectTypeTarget = necroToHarm.effects.score === 'Mais' ? 'score' : 'movement';
-                    } else {
-                        targetId = 'player-1'; // Default to helping player 1 if they have a bad effect
-                        effectTypeTarget = 'score';
-                    }
-                    break;
-                default:
-                     targetId = 'player-1'; // Default target
-            }
-             actions.push({ action: 'play', cardId: card.id, card, target: targetId, effectTypeTarget });
-        }
-        
-        // Still need to play a value card if required
-        const valueCardsInHand = aiPlayer.hand.filter(c => c.type === 'value');
-        if (!aiPlayer.playedValueCardThisTurn && valueCardsInHand.length >= 2) {
-             actions.push({ action: 'play', cardId: valueCardsInHand[0].id, card: valueCardsInHand[0] }); // Play lowest value card to not help own score much
-        }
-        return { actions };
-    }
+    // 5. Remove card from player's hand and clear selection.
+    player.hand = player.hand.filter(c => c.id !== card.id);
+    gameState.selectedCard = null;
 
+    // 6. Update state based on card type.
+    if (card.type === 'value') {
+        // Value cards are simple. They always apply to the caster.
+        player.playedCards.value.push(card);
+        player.playedValueCardThisTurn = true;
+        player.nextResto = card;
+        updateLog(`${player.name} jogou a carta de valor ${card.name}.`);
+    } else if (card.type === 'effect') {
+        // Effect cards have more complex logic.
+        card.casterId = player.id; // Always record who cast it.
 
-    if (aiPlayer.aiType === 'inversus') {
-        const player1 = gameState.players['player-1'];
-
-        if (!gameState.inversusTotalAbilityActive && Math.random() < 0.25) {
-            actions.push({ action: 'use_inversus_ability' });
-            return { actions };
-        }
-        
-        // Mirror effect cards that are on player's board but not on AI's board yet
-        player1.playedCards.effect.forEach(p1Card => {
-            const isAlreadyOnBoard = aiPlayer.playedCards.effect.some(aiP1Card => aiP1Card.name === p1Card.name);
-            if (!isAlreadyOnBoard) {
-                const aiCard = aiPlayer.hand.find(c => c.name === p1Card.name && c.type === 'effect' && !actions.some(a => a.card?.id === c.id));
-                if(aiCard) {
-                    // Inversus targets player 1, except for Reversus Total which is self-cast.
-                    let targetId = aiCard.name === 'Reversus Total' ? aiPlayer.id : 'player-1';
-                    actions.push({ action: 'play', cardId: aiCard.id, card: aiCard, target: targetId, effectTypeTarget: p1Card.reversedEffectType });
-                }
-            }
-        });
-
-        // Standard value card rule check
-        if (!aiPlayer.playedValueCardThisTurn) {
-            const valueCardsInHand = aiPlayer.hand.filter(c => c.type === 'value');
-            // Check if a value card play has already been queued by mirroring logic
-            const hasAlreadyQueuedValueCard = actions.some(a => a.card?.type === 'value');
-
-            if (valueCardsInHand.length >= 2 && !hasAlreadyQueuedValueCard) {
-                 // Try to mirror player's last value card play
-                const lastPlayerValueCard = player1.playedCards.value[player1.playedCards.value.length - 1];
-                let cardToPlay = null;
-                if(lastPlayerValueCard) {
-                     cardToPlay = aiPlayer.hand.find(c => c.value === lastPlayerValueCard.value && c.type === 'value');
-                }
-
-                if (!cardToPlay) {
-                    cardToPlay = valueCardsInHand[0]; // Fallback to lowest card
-                }
-                
-                actions.push({ action: 'play', cardId: cardToPlay.id, card: cardToPlay });
-            }
-        }
-        
-        return { actions };
-    }
-
-
-    if (gameState.storyBattleType === '1v3_king' || (gameState.isFinalBoss && aiPlayer.aiType === 'necroverso_final')) {
-        myTeamIds = playerIds.filter(id => gameState.players[id]?.aiType === aiPlayer.aiType);
-        opponentIds = playerIds.filter(id => !myTeamIds.includes(id));
-    } else if(gameState.gameMode === 'duo') {
-        const isTeamA = config.TEAM_A.includes(aiPlayer.id);
-        myTeamIds = (isTeamA ? config.TEAM_A : config.TEAM_B).filter(id => playerIds.includes(id));
-        opponentIds = (isTeamA ? config.TEAM_B : config.TEAM_A).filter(id => playerIds.includes(id));
-    } else {
-        myTeamIds = [aiPlayer.id];
-        opponentIds = playerIds.filter(id => id !== aiPlayer.id);
-    }
-    
-    const isInverted = gameState.reversusTotalActive;
-    let pulaPathChoice = undefined;
-    let necroXActionPushed = false;
-    let reversumAbilityJustUsed = false;
-    
-    // Disable king abilities in 1v3 battle
-    if (aiPlayer.aiType === 'reversum' && !gameState.reversusTotalActive && !gameState.reversumAbilityUsedThisRound && gameState.storyBattleType !== '1v3_king') {
-        let scoreChangeIfUsed = 0;
-        playerIds.forEach(pId => {
-            const p = gameState.players[pId];
-            const originalScoreEffect = p.effects.score;
-            const originalMoveEffect = p.effects.movement;
-            const invertedScoreEffect = originalScoreEffect === 'Mais' ? 'Menos' : (originalScoreEffect === 'Menos' ? 'Mais' : null);
-            const invertedMoveEffect = originalMoveEffect === 'Sobe' ? 'Desce' : (originalMoveEffect === 'Desce' ? 'Sobe' : null);
-
-            let change = 0;
-            if (invertedScoreEffect) change += (invertedScoreEffect === 'Mais' ? 1 : -1) - (originalScoreEffect === 'Mais' ? 1 : -1);
-            if (invertedMoveEffect) change += (invertedMoveEffect === 'Sobe' ? 1 : -1) - (originalMoveEffect === 'Sobe' ? 1 : -1);
-            
-            scoreChangeIfUsed += myTeamIds.includes(pId) ? change : -change;
-        });
-
-        if (scoreChangeIfUsed > 0) {
-            actions.push({ action: 'use_reversum_ability' });
-            reversumAbilityJustUsed = true;
-        }
-    }
-
-    if (aiPlayer.aiType === 'necroverso_final' && (aiPlayer.resto?.value >= 8) && !gameState.necroXUsedThisRound && Math.random() < 0.33) {
-        if (!aiPlayer.effects.score || aiPlayer.effects.score === (isInverted ? 'Mais' : 'Menos')) {
-            actions.push({ action: 'use_necrox_ability' });
-            necroXActionPushed = true;
-        }
-    }
-
-    if (!aiPlayer.playedValueCardThisTurn) {
-        const valueCardsInHand = aiPlayer.hand.filter(c => c.type === 'value');
-        if (valueCardsInHand.length >= 2) {
-            valueCardsInHand.sort((a, b) => a.value - b.value);
-            const myHighestPosition = Math.max(...myTeamIds.map(id => gameState.players[id].position));
-            const opponentHighestPosition = opponentIds.length > 0 ? Math.max(...opponentIds.map(id => gameState.players[id].position)) : 0;
-            
-            let cardToPlay = (opponentHighestPosition - myHighestPosition >= 3) ? valueCardsInHand[0] : valueCardsInHand[valueCardsInHand.length - 1];
-            if (aiPlayer.aiType === 'necroverso_tutorial' || gameState.storyBattleType === '1v3_king') { 
-                 cardToPlay = valueCardsInHand[valueCardsInHand.length - 1]; // Make them play aggressively
-            }
-            actions.push({ action: 'play', cardId: cardToPlay.id, card: cardToPlay });
-        }
-    }
-
-    const availableEffectCards = aiPlayer.hand.filter(c => c.type === 'effect');
-    if (availableEffectCards.length > 0 && !reversumAbilityJustUsed) {
-        const getOpponentsByPosition = () => opponentIds.map(id => gameState.players[id]).sort((a, b) => b.position - a.position);
-        
-        const buffScoreEffect = isInverted ? 'Menos' : 'Mais';
-        const debuffScoreEffect = isInverted ? 'Mais' : 'Menos';
-        const buffMoveEffect = 'Sobe';
-        const debuffMoveEffect = 'Desce';
-
-        const harmTargets = getOpponentsByPosition();
-        let leaderTarget = harmTargets.length > 0 ? harmTargets[0] : null;
-
-        for (const card of availableEffectCards) {
-            let targetId = undefined, effectTypeTarget = undefined, playOptions = {};
-            switch (card.name) {
-                case 'Mais': case 'Menos':
-                    if (necroXActionPushed) break;
-                    if (card.name === buffScoreEffect) {
-                        const buffTarget = myTeamIds.map(id => gameState.players[id]).filter(p => p.effects.score !== buffScoreEffect).sort((a, b) => a.liveScore - b.liveScore)[0];
-                        if (buffTarget) targetId = buffTarget.id;
-                    } else if (card.name === debuffScoreEffect) {
-                        if (leaderTarget && leaderTarget.effects.score !== debuffScoreEffect) targetId = leaderTarget.id;
-                    }
-                    break;
-                case 'Sobe': case 'Desce':
-                     if (card.name === buffMoveEffect) {
-                        const buffTarget = myTeamIds.map(id => gameState.players[id]).filter(p => p.effects.movement !== buffMoveEffect).sort((a, b) => a.liveScore - b.liveScore)[0];
-                        if (buffTarget) targetId = buffTarget.id;
-                    } else if (card.name === debuffMoveEffect) {
-                        if (leaderTarget && leaderTarget.effects.movement !== debuffMoveEffect) targetId = leaderTarget.id;
-                    }
-                    break;
-                case 'Pula':
-                    if (leaderTarget) {
-                        let availablePaths;
-                        if (aiPlayer.aiType === 'necroverso_final') {
-                            // Can choose any path, including occupied ones.
-                            availablePaths = [...gameState.boardPaths];
-                        } else {
-                            // Other AIs can only choose empty paths.
-                            const occupiedPathIds = gameState.playerIdsInGame.map(id => gameState.players[id].pathId);
-                            availablePaths = gameState.boardPaths.filter(p => !occupiedPathIds.includes(p.id));
-                        }
-        
-                        if (availablePaths.length > 0) {
-                            targetId = leaderTarget.id;
-                            // Prefers paths with red spaces to harm the opponent.
-                            pulaPathChoice = availablePaths.sort((a, b) => b.spaces.filter(s => s.color === 'red' && !s.isUsed).length - a.spaces.filter(s => s.color === 'red' && !s.isUsed).length)[0].id;
-                        }
-                    }
-                    break;
-                case 'Reversus':
-                    const memberToHelp = myTeamIds.map(id => gameState.players[id]).find(p => p.effects.score === debuffScoreEffect || p.effects.movement === debuffMoveEffect);
-                    if (memberToHelp) {
-                        targetId = memberToHelp.id;
-                        effectTypeTarget = memberToHelp.effects.score === debuffScoreEffect ? 'score' : 'movement';
-                    } else {
-                        const opponentToHarm = opponentIds.map(id => gameState.players[id]).find(p => p.effects.score === buffScoreEffect || p.effects.movement === buffMoveEffect);
-                        if (opponentToHarm) {
-                             targetId = opponentToHarm.id;
-                             effectTypeTarget = opponentToHarm.effects.score === buffScoreEffect ? 'score' : 'movement';
-                        }
-                    }
-                    break;
-                case 'Reversus Total':
-                    // AI logic for new Reversus Total
-                    const opponentToHarmWithLock = opponentIds.map(id => gameState.players[id]).find(p => p.status === 'winning' && p.effects.score === buffScoreEffect && !p.playedCards.effect.find(c => c.name === 'Mais')?.isLocked);
-                    if (opponentToHarmWithLock) {
-                         targetId = opponentToHarmWithLock.id;
-                         playOptions.isIndividualLock = true;
-                         playOptions.effectNameToApply = 'Menos'; // Lock a 'Menos' effect
-                    } else {
-                        let scoreChange = 0;
-                        Object.values(gameState.players).forEach(p => {
-                            let change = 0;
-                            if (p.effects.score === debuffScoreEffect || p.effects.movement === debuffMoveEffect) change = 1;
-                            if (p.effects.score === buffScoreEffect || p.effects.movement === buffMoveEffect) change = -1;
-                            scoreChange += myTeamIds.includes(p.id) ? change : -change;
-                        });
-                        if (scoreChange > 0) targetId = aiPlayer.id; // Self-target for global
-                    }
-                    break;
-            }
-            if (targetId && !actions.some(a => a.card && a.card.type === 'effect')) {
-                actions.push({ action: 'play', cardId: card.id, card, target: targetId, effectTypeTarget, options: playOptions });
-            }
-        }
-    }
-    return { actions, pulaPathChoice };
-};
-
-export async function executeAiTurn(aiPlayer) {
-    const { gameState } = getState();
-    updateLog(`${aiPlayer.name} está pensando...`);
-    gameState.gamePhase = 'paused';
-    renderAll();
-    await tryToSpeak(aiPlayer); // Attempt to speak at the start of the turn
-    await new Promise(res => setTimeout(res, 1000));
-    
-    const decision = getAiTurnDecision(aiPlayer);
-    
-    const mustPlayValueCard = aiPlayer.hand.filter(c => c.type === 'value').length >= 2 && !aiPlayer.playedValueCardThisTurn;
-    if (mustPlayValueCard && !decision.actions.some(a => a.card?.type === 'value')) {
-        console.error(`${aiPlayer.name} failed to make a mandatory value card play. Forcing one.`);
-        const valueCardToPlay = aiPlayer.hand.filter(c=>c.type === 'value').sort((a,b) => a.value - b.value)[0];
-        if (valueCardToPlay) {
-            decision.actions.unshift({ action: 'play', cardId: valueCardToPlay.id, card: valueCardToPlay });
+        // a. Apply the game logic effect
+        if (options.isIndividualLock) {
+            card.isLocked = true;
+            card.name = options.effectNameToApply;
+            updateLog(`${player.name} usou Reversus Total para travar o efeito '${card.name}' em ${gameState.players[targetId].name}.`);
+            applyEffect(card, targetId, player.name);
+        } else if (card.name === 'Reversus') {
+            card.reversedEffectType = effectTypeToReverse;
+            applyEffect(card, targetId, player.name, effectTypeToReverse);
         } else {
-             await advanceToNextPlayer();
-             return;
+            applyEffect(card, targetId, player.name);
         }
+        
+        // b. Place the card visually in the correct slot on the correct player's board.
+        const cardToPlaceInSlot = { ...card }; // Clone to avoid mutation issues
+        const scoreEffects = ['Mais', 'Menos', 'NECRO X', 'NECRO X Invertido', 'Carta da Versatrix'];
+        
+        let targetSlotType = null;
+        if (scoreEffects.includes(cardToPlaceInSlot.name) || (cardToPlaceInSlot.name === 'Reversus' && cardToPlaceInSlot.reversedEffectType === 'score')) {
+            targetSlotType = 'score';
+        } else if (['Sobe', 'Desce', 'Pula'].includes(cardToPlaceInSlot.name) || (cardToPlaceInSlot.name === 'Reversus' && cardToPlaceInSlot.reversedEffectType === 'movement')) {
+            targetSlotType = 'movement';
+        } else if (cardToPlaceInSlot.name === 'Reversus Total' && !options.isIndividualLock) {
+             targetSlotType = 'reversus-total';
+        }
+
+        // c. If a card of the same type is already in the destination slot, remove it.
+        if (targetSlotType) {
+            const currentEffects = cardDestinationPlayer.playedCards.effect;
+            let oldCardIndex = -1;
+            
+            // Find the index of the old card to replace
+            if (targetSlotType === 'score') {
+                oldCardIndex = currentEffects.findIndex(c => scoreEffects.includes(c.name) || (c.name === 'Reversus' && c.reversedEffectType === 'score'));
+            } else if (targetSlotType === 'movement') {
+                oldCardIndex = currentEffects.findIndex(c => ['Sobe', 'Desce', 'Pula'].includes(c.name) || (c.name === 'Reversus' && c.reversedEffectType === 'movement'));
+            } else if (targetSlotType === 'reversus-total') {
+                oldCardIndex = currentEffects.findIndex(c => c.name === 'Reversus Total' && !c.isLocked);
+            }
+
+            // Remove it if found
+            if (oldCardIndex !== -1) {
+                const [oldCard] = currentEffects.splice(oldCardIndex, 1);
+                gameState.decks.effect.push(oldCard); // Return to deck
+            }
+        }
+        
+        // d. Finally, add the new card to the destination player's effect cards.
+        cardDestinationPlayer.playedCards.effect.push(cardToPlaceInSlot);
+    }
+    
+    // 7. Reset turn state and re-render.
+    gameState.consecutivePasses = 0;
+    gameState.playedAnyCardThisTurn = true;
+    renderAll();
+    updateTurnIndicator();
+}
+
+export async function advanceToNextPlayer() {
+    const { gameState } = getState();
+    const currentPlayer = gameState.players[gameState.currentPlayer];
+    
+    if (!gameState.playedAnyCardThisTurn) {
+        gameState.consecutivePasses++;
+        updateLog(`${currentPlayer.name} passou o turno.`);
     }
 
-    if (decision.actions.length === 0) {
+    if (await checkRoundEnd()) return;
+
+    const currentIndex = gameState.playerIdsInGame.indexOf(gameState.currentPlayer);
+    const nextIndex = (currentIndex + 1) % gameState.playerIdsInGame.length;
+    gameState.currentPlayer = gameState.playerIdsInGame[nextIndex];
+    
+    // Reset turn-specific flags for the new current player
+    const newCurrentPlayer = gameState.players[gameState.currentPlayer];
+    newCurrentPlayer.playedValueCardThisTurn = false;
+    gameState.playedAnyCardThisTurn = false;
+    
+    renderAll();
+
+    if (newCurrentPlayer.isEliminated) {
         await advanceToNextPlayer();
         return;
     }
-
-    for (const action of decision.actions) {
-        await new Promise(res => setTimeout(res, 1200));
-
-        if (action.action === 'use_reversum_ability') {
-            updateLog("Rei Reversum usa sua habilidade: REVERSUS TOTAL!");
-            gameState.reversumAbilityUsedThisRound = true;
-            applyEffect({ name: 'Reversus Total' }, aiPlayer.id, aiPlayer.name);
-        } else if (action.action === 'use_necrox_ability') {
-            const storyAbilities = await import('./story-abilities.js');
-            await storyAbilities.triggerNecroX(aiPlayer);
-        } else if (action.action === 'use_inversus_ability') {
-            updateLog("Inversus usa sua habilidade: INVERSÃO TOTAL!");
-            announceEffect("INVERSÃO TOTAL", "inversus-total", 2500);
-            gameState.inversusTotalAbilityActive = true;
-            dom.scalableContainer.classList.add('inversus-total-active');
-        } else if (action.action === 'use_narrator_ability') {
-            const storyAbilities = await import('./story-abilities.js');
-            switch(action.ability) {
-                case 'confusion': await storyAbilities.triggerContravox(); break;
-                case 'reversus':
-                     updateLog("Narrador usa sua habilidade: REVERSUS TOTAL!");
-                     applyEffect({ name: 'Reversus Total' }, aiPlayer.id, aiPlayer.name);
-                     break;
-                case 'necroX': await storyAbilities.triggerNecroX(aiPlayer); break;
-            }
-        } else if (action.action === 'play') {
-            const cardInHand = aiPlayer.hand.find(c => c.id === action.cardId);
-            if (cardInHand) {
-                if (cardInHand.name === 'Pula' && decision.pulaPathChoice !== undefined) {
-                    const targetPlayer = gameState.players[action.target];
-                    targetPlayer.targetPathForPula = decision.pulaPathChoice;
-                    updateLog(`${aiPlayer.name} escolheu que ${targetPlayer.name} pule para o caminho ${decision.pulaPathChoice + 1}.`);
-                }
-                playCard(aiPlayer, cardInHand, action.target, action.effectTypeTarget, action.options);
-            } else {
-                updateLog({type: 'system', message: `(AI tentou jogar uma carta que não está na mão: ${action.card?.name})`});
-            }
-        }
-    }
     
-    await new Promise(res => setTimeout(res, 1000));
-    await advanceToNextPlayer();
-}
-
-const calculateScore = (player) => {
-    const { gameState } = getState();
-    let score = player.playedCards.value.reduce((sum, card) => sum + (card.value || 0), 0);
-    const cardEffect = player.effects.score;
-    const fieldEffects = gameState.activeFieldEffects.filter(fe => fe.appliesTo === player.id);
-
-    let restoValue = player.resto?.value || 0;
-    if (fieldEffects.some(fe => fe.name === 'Resto Maior')) {
-        restoValue = 10;
-        if(gameState.gamePhase === 'resolution') updateLog(`Efeito 'Resto Maior' ativado para ${player.name}.`);
-    }
-    if (fieldEffects.some(fe => fe.name === 'Resto Menor')) {
-        restoValue = 2;
-         if(gameState.gamePhase === 'resolution') updateLog(`Efeito 'Resto Menor' ativado para ${player.name}. Resto é 2.`);
-    }
-    
-    if (cardEffect === 'Mais') score += restoValue;
-    if (cardEffect === 'Menos') score -= restoValue;
-
-    if (cardEffect === 'Menos' && fieldEffects.some(fe => fe.name === 'Super Exposto')) {
-        score -= restoValue;
-        if(gameState.gamePhase === 'resolution') updateLog(`Efeito 'Super Exposto' dobra o 'Menos' para ${player.name}.`);
-    }
-
-    const isNecroXInvertedByTotal = gameState.reversusTotalActive;
-    if (cardEffect === 'NECRO X') {
-        if (isNecroXInvertedByTotal) {
-            if (restoValue !== 0) score = Math.floor(score / restoValue);
-        } else {
-            score *= restoValue;
-        }
-    } else if (cardEffect === 'NECRO X Invertido') {
-        if (isNecroXInvertedByTotal) {
-            score *= restoValue;
-        } else {
-            if (restoValue !== 0) score = Math.floor(score / restoValue);
-        }
-    }
-    
-    return score;
-};
-
-export const updateLiveScoresAndWinningStatus = () => {
-    const { gameState } = getState();
-    if (!gameState) return;
-    const playerIds = gameState.playerIdsInGame;
-    const scores = {};
-    playerIds.forEach(id => {
-        const player = gameState.players[id];
-        player.liveScore = calculateScore(player);
-        scores[id] = player.liveScore;
-        player.status = 'neutral';
-    });
-
-    if (dom.leftScoreValue && dom.rightScoreValue && !gameState.isInversusMode) {
-        const player1Score = gameState.players['player-1']?.liveScore || 0;
-        dom.leftScoreValue.textContent = player1Score;
-
-        const opponentIds = gameState.playerIdsInGame.filter(id => id !== 'player-1' && !gameState.players[id].isEliminated);
-        let opponentScore = 0;
-        let mainOpponentId = null;
-
-        if (gameState.isStoryMode) {
-            mainOpponentId = opponentIds.find(id => gameState.players[id].aiType) || opponentIds[0];
-            opponentScore = opponentIds.reduce((sum, id) => sum + (gameState.players[id]?.liveScore || 0), 0);
-        } else if (gameState.gameMode === 'duo') {
-            const player1Team = config.TEAM_A.includes('player-1') ? config.TEAM_A : config.TEAM_B;
-            const opponentTeamIds = gameState.playerIdsInGame.filter(id => !player1Team.includes(id) && !gameState.players[id].isEliminated);
-            mainOpponentId = opponentTeamIds[0]; // First opponent in the team for color
-            opponentScore = opponentTeamIds.reduce((sum, id) => sum + (gameState.players[id]?.liveScore || 0), 0);
-        } else { // solo
-            mainOpponentId = opponentIds[0];
-            opponentScore = opponentIds.reduce((sum, id) => sum + (gameState.players[id]?.liveScore || 0), 0);
-        }
-        
-        dom.rightScoreValue.textContent = opponentScore;
-
-        // Update opponent score box color
-        if (mainOpponentId) {
-            const pIdNum = parseInt(mainOpponentId.split('-')[1]);
-            dom.rightScoreBox.className = 'side-score-box'; // Reset classes
-            dom.rightScoreBox.classList.add(`player-${pIdNum}-score`);
-        } else {
-            // Default to player 2 color if no opponent found
-            dom.rightScoreBox.className = 'side-score-box player-2-score hidden';
-        }
-    }
-
-    const teamScoresEl = document.getElementById('team-scores-container');
-    if (gameState.storyBattleType === '1v3_king') {
-        const p1Score = gameState.players['player-1'].liveScore;
-        const necroScore = ['player-2', 'player-3', 'player-4'].reduce((sum, id) => sum + (gameState.players[id]?.liveScore || 0), 0);
-        if (p1Score > necroScore) { 
-            gameState.players['player-1'].status = 'winning'; 
-            ['player-2', 'player-3', 'player-4'].forEach(id => { if(gameState.players[id]) gameState.players[id].status = 'losing' });
-        } else if (necroScore > p1Score) {
-            gameState.players['player-1'].status = 'losing';
-            ['player-2', 'player-3', 'player-4'].forEach(id => { if(gameState.players[id]) gameState.players[id].status = 'winning' });
-        }
-        teamScoresEl.innerHTML = `
-            <div class="team-score team-a"><span>Você: <strong>${p1Score}</strong></span></div>
-            <div class="team-score team-b"><span>Rei Necroverso: <strong>${necroScore}</strong></span></div>`;
-        teamScoresEl.classList.remove('hidden');
-        return;
-    } else if (gameState.isFinalBoss) {
-        const teamPlayerScore = (gameState.players['player-1']?.liveScore || 0) + (gameState.players['player-4']?.liveScore || 0);
-        const teamNecroScore = (scores['player-2'] || 0) + (scores['player-3'] || 0);
-        
-        if (teamPlayerScore > teamNecroScore) {
-            if(gameState.players['player-1']) gameState.players['player-1'].status = 'winning';
-            if(gameState.players['player-4']) gameState.players['player-4'].status = 'winning';
-            if(gameState.players['player-2']) gameState.players['player-2'].status = 'losing';
-            if(gameState.players['player-3']) gameState.players['player-3'].status = 'losing';
-        } else if (teamNecroScore > teamPlayerScore) {
-            if(gameState.players['player-1']) gameState.players['player-1'].status = 'losing';
-            if(gameState.players['player-4']) gameState.players['player-4'].status = 'losing';
-            if(gameState.players['player-2']) gameState.players['player-2'].status = 'winning';
-            if(gameState.players['player-3']) gameState.players['player-3'].status = 'winning';
-        }
-        const hearts = '🖤'.repeat(gameState.necroversoHearts || 0);
-        teamScoresEl.innerHTML = `
-            <div class="team-score team-a"><span>Você & Versatrix: <strong>${teamPlayerScore}</strong></span></div>
-            <div class="team-score team-b">
-                <span>Necroverso: <strong>${teamNecroScore}</strong></span>
-                <span class="header-hearts" title="Corações do Necroverso">${hearts}</span>
-            </div>`;
-        teamScoresEl.classList.remove('hidden');
-        return;
-    }
-
-    if (gameState.gameMode === 'solo' || gameState.isInversusMode) {
-        const currentScores = playerIds.map(id => gameState.players[id].liveScore);
-        const maxScore = Math.max(...currentScores);
-        const minScore = Math.min(...currentScores);
-        if (maxScore !== minScore) {
-            playerIds.forEach(id => { 
-                const p = gameState.players[id];
-                if (p.liveScore === maxScore) p.status = 'winning';
-                if (p.liveScore === minScore) p.status = 'losing';
-            });
-        }
-        teamScoresEl.classList.add('hidden');
-    } else { // duo
-        const teamAScore = config.TEAM_A.reduce((sum, id) => sum + (gameState.players[id]?.liveScore || 0), 0);
-        const teamBScore = config.TEAM_B.reduce((sum, id) => sum + (gameState.players[id]?.liveScore || 0), 0);
-        
-        if (teamAScore > teamBScore) {
-            config.TEAM_A.forEach(id => { if(gameState.players[id]) gameState.players[id].status = 'winning'; });
-            config.TEAM_B.forEach(id => { if(gameState.players[id]) gameState.players[id].status = 'losing'; });
-        } else if (teamBScore > teamAScore) {
-            config.TEAM_A.forEach(id => { if(gameState.players[id]) gameState.players[id].status = 'losing'; });
-            config.TEAM_B.forEach(id => { if(gameState.players[id]) gameState.players[id].status = 'winning'; });
-        }
-
-        teamScoresEl.innerHTML = `
-            <div class="team-score team-a">
-                <span>Equipe Azul/Verde: <strong>${teamAScore}</strong></span>
-            </div>
-            <div class="team-score team-b">
-                <span>Equipe Vermelho/Amarelo: <strong>${teamBScore}</strong></span>
-            </div>
-        `;
-        teamScoresEl.classList.remove('hidden');
-    }
-};
-
-const resolveRound = async () => {
-    const { gameState } = getState();
-    if (gameState.gamePhase === 'game_over') return;
-
-    gameState.gamePhase = 'resolution';
-    updateTurnIndicator();
-
-    if (gameState.inversusTotalAbilityActive) {
-        dom.scalableContainer.classList.remove('inversus-total-active');
-        gameState.inversusTotalAbilityActive = false;
-    }
-    const playerIds = gameState.playerIdsInGame;
-
-    gameState.versatrixSwapActive = false;
-    const versatrix = Object.values(gameState.players).find(p => p.aiType === 'versatrix');
-    const player1 = gameState.players['player-1'];
-
-    if (versatrix && player1 && gameState.turn >= 2) {
-        const versatrixScore = calculateScore(versatrix);
-        const playerScore = calculateScore(player1);
-        if (versatrixScore < playerScore && [6, 7, 8, 9].includes(player1.position)) {
-            gameState.versatrixSwapActive = true;
-            updateLog("Versatrix usa sua habilidade: CAMPO VERSÁTIL!");
-            playSoundEffect('campoinverso');
-            announceEffect('CAMPO VERSÁTIL!', 'reversus', 2500);
-            await new Promise(res => setTimeout(res, 2500));
-        }
-    }
-
-    const scores = {};
-    playerIds.forEach(id => scores[id] = calculateScore(gameState.players[id]));
-    updateLog(`Fim da Rodada: Pontuações - ${playerIds.map(id => `${gameState.players[id].name}: ${scores[id]}`).join(', ')}.`);
-    
-    if (gameState.versatrixSwapActive && versatrix) {
-        [scores['player-1'], scores[versatrix.id]] = [scores[versatrix.id], scores['player-1']];
-        updateLog(`CAMPO VERSÁTIL trocou as pontuações entre Você e ${versatrix.name}!`);
-    }
-
-    const movements = Object.fromEntries(playerIds.map(id => [id, 0]));
-    const winners = [];
-    const losers = [];
-
-    // --- Determine Round Winners ---
-    if (gameState.storyBattleType === '1v3_king') {
-        const p1Score = scores['player-1'];
-        const necroScore = ['player-2', 'player-3', 'player-4'].reduce((sum, id) => sum + (scores[id] || 0), 0);
-        updateLog(`Pontuação da Rodada - Você: ${p1Score}, Necroverso (Total): ${necroScore}.`);
-        if (p1Score > necroScore) { winners.push('player-1'); } 
-        else if (necroScore > p1Score) { winners.push('player-2', 'player-3', 'player-4'); }
-        else { updateLog("Empate! Todos avançam!"); winners.push(...playerIds); }
-    } else if (gameState.isFinalBoss) { // Handles 2v2 final battle
-        const teamPlayerScore = (scores['player-1'] || 0) + (scores['player-4'] || 0);
-        const teamNecroScore = (scores['player-2'] || 0) + (scores['player-3'] || 0);
-        updateLog(`Pontuação da Rodada - Você/Versatrix: ${teamPlayerScore}, Necroverso: ${teamNecroScore}.`);
-        if (teamPlayerScore > teamNecroScore) { winners.push('player-1', 'player-4'); } 
-        else if (teamNecroScore > teamPlayerScore) { winners.push('player-2', 'player-3'); }
-    } else if (gameState.gameMode === 'duo') {
-        const teamAScore = config.TEAM_A.filter(id => playerIds.includes(id)).reduce((sum, id) => sum + (scores[id] || 0), 0);
-        const teamBScore = config.TEAM_B.filter(id => playerIds.includes(id)).reduce((sum, id) => sum + (scores[id] || 0), 0);
-        updateLog(`Pontuação Equipes - Azul/Verde: ${teamAScore}, Vermelho/Amarelo: ${teamBScore}.`);
-        if (teamAScore > teamBScore) { winners.push(...config.TEAM_A.filter(id => playerIds.includes(id))); }
-        else if (teamBScore > teamAScore) { winners.push(...config.TEAM_B.filter(id => playerIds.includes(id))); }
-    } else { // Default for solo modes (including 1v1 story) and Inversus
-        const activePlayerIds = playerIds.filter(id => !gameState.players[id].isEliminated);
-        if (activePlayerIds.length > 0) {
-            const maxScore = Math.max(...activePlayerIds.map(id => scores[id]));
-            const potentialWinners = activePlayerIds.filter(id => scores[id] === maxScore);
-            if (potentialWinners.length < activePlayerIds.length) { // Avoid adding everyone on a total tie
-                winners.push(...potentialWinners);
-            }
-        }
-    }
-    
-    playerIds.forEach(id => { if (!winners.includes(id)) losers.push(id); });
-
-    // --- Final Boss heart logic ---
-    if (gameState.isFinalBoss && winners.includes('player-1')) {
-        gameState.necroversoHearts--;
-        updateLog(`Necroverso perdeu um coração! Restam: ${gameState.necroversoHearts}`);
-        playSoundEffect('desce');
-        document.body.classList.add('screen-shaking');
-        setTimeout(() => document.body.classList.remove('screen-shaking'), 400);
-
-        if (gameState.necroversoHearts <= 0) {
-            document.dispatchEvent(new CustomEvent('storyWinLoss', { detail: { battle: 'necroverso_final', won: true } }));
-            return; // Game over
-        }
-    }
-
-    // Determine next player
-    let nextPlayerId = null;
-    if (winners.length > 0) {
-        if (winners.length === 1) {
-            nextPlayerId = winners[0];
-        } else {
-            const tiedPlayerRestos = winners.map(id => ({ id, restoValue: gameState.players[id].resto?.value || 0 }));
-            const maxResto = Math.max(...tiedPlayerRestos.map(p => p.restoValue));
-            const winnersByResto = tiedPlayerRestos.filter(p => p.restoValue === maxResto);
-            nextPlayerId = shuffle(winnersByResto.map(p => p.id))[0];
-        }
-    }
-
-    if (nextPlayerId) {
-        gameState.currentPlayer = nextPlayerId;
-        updateLog(`Próximo a jogar: ${gameState.players[nextPlayerId].name} (vencedor da rodada).`);
-    }
-
-    if (gameState.isInversusMode) {
-        losers.forEach(id => {
-            const p = gameState.players[id];
-            if (p.hearts > 0) { p.hearts--; updateLog(`${p.name} perdeu um coração! Restam: ${p.hearts}`); }
-        });
-        await showRoundSummaryModal(winners, scores);
-        await endGameCheck();
-        return;
-    }
-
-    // This is the win bonus movement.
-    winners.forEach(id => {
-        const fieldEffects = gameState.activeFieldEffects.filter(fe => fe.appliesTo === id);
-        if (fieldEffects.some(fe => fe.name === 'Parada')) updateLog(`${gameState.players[id].name} venceu, mas o efeito 'Parada' impede o avanço.`);
-        else if (fieldEffects.some(fe => fe.name === 'Desafio')) {
-             const playedPositiveEffect = gameState.players[id].playedCards.effect.some(c => ['Mais', 'Sobe'].includes(c.name));
-             if (!playedPositiveEffect) {
-                 movements[id] += 3;
-                 updateLog(`${gameState.players[id].name} completou o 'Desafio' e avança 3 casas!`);
-             } else {
-                 movements[id] += 1;
-                 updateLog(`${gameState.players[id].name} venceu mas falhou no 'Desafio', avança 1 casa.`);
-             }
-        } else movements[id] += 1;
-    });
-    if (winners.length > 0) updateLog(`Vencedor(es) da rodada: ${winners.map(id => gameState.players[id].name).join(', ')}.`);
-    else updateLog("Empate na rodada! Ninguém ganha bônus.");
-
-    losers.forEach(id => {
-        const fieldEffects = gameState.activeFieldEffects.filter(fe => fe.appliesTo === id);
-        if (fieldEffects.some(fe => fe.name === 'Impulso')) {
-            movements[id] += 1;
-            updateLog(`${gameState.players[id].name} perdeu, mas o 'Impulso' o avança 1 casa.`);
-        } else if (fieldEffects.some(fe => fe.name === 'Castigo')) {
-            movements[id] -= 3;
-            updateLog(`${gameState.players[id].name} perdeu e sofre o 'Castigo', voltando 3 casas.`);
-        }
-    });
-
-    // This is the card effect movement. It is added to the win bonus movement.
-    playerIds.forEach(id => {
-        const player = gameState.players[id];
-        let moveChange = 0;
-        if (player.effects.movement === 'Sobe') moveChange = 1;
-        if (player.effects.movement === 'Desce') moveChange = -1;
-        
-        if (player.effects.movement === 'Desce' && gameState.activeFieldEffects.some(fe => fe.name === 'Super Exposto' && fe.appliesTo === id)) {
-            moveChange *= 2;
-            updateLog(`Efeito 'Super Exposto' dobra o 'Desce' para ${player.name}.`);
-        }
-        
-        if (moveChange !== 0) {
-            updateLog(`${player.name} aplica o efeito '${player.effects.movement}'.`);
-            movements[id] += moveChange;
-        }
-    });
-    
-    playerIds.forEach(id => {
-        const player = gameState.players[id];
-        if (player.effects.movement === 'Pula' && player.targetPathForPula !== null) {
-            const oldPath = gameState.boardPaths.find(p => p.playerId === id);
-            if(oldPath) oldPath.playerId = null;
-            player.pathId = player.targetPathForPula;
-            gameState.boardPaths[player.pathId].playerId = id;
-            updateLog(`${player.name} pulou para o caminho ${player.pathId + 1}.`);
-        }
-    });
-    
-    if (gameState.versatrixSwapActive && versatrix) {
-        [movements['player-1'], movements[versatrix.id]] = [movements[versatrix.id], movements['player-1']];
-        updateLog(`CAMPO VERSÁTIL trocou os movimentos entre Você e ${versatrix.name}!`);
-    }
-    
-    playerIds.forEach(id => {
-        const player = gameState.players[id];
-        if (player.isEliminated) return;
-
-        const oldPos = player.position;
-        const move = movements[id] || 0;
-        let newPos = oldPos + move;
-
-        if (gameState.isFinalBoss) {
-            if (newPos > config.WINNING_POSITION) {
-                newPos = 1; // Loop back to start
-            } else if (newPos < 1) {
-                newPos = 1; // Cannot go below 1
-            }
-        } else {
-             newPos = Math.min(config.WINNING_POSITION, Math.max(1, newPos));
-        }
-        
-        player.position = newPos;
-        if (player.position !== oldPos) {
-             updateLog(`${player.name} moveu de ${oldPos} para ${player.position}.`);
-        }
-    });
-    
-    renderBoard();
-    await showRoundSummaryModal(winners, scores);
-    
-    await endGameCheck();
-};
-
-export const advanceToNextPlayer = async () => {
-    const { gameState } = getState();
-    const player = gameState.players[gameState.currentPlayer];
-    player.playedValueCardThisTurn = false;
-    const playerIds = gameState.playerIdsInGame;
-
-    if (!gameState.playedAnyCardThisTurn) {
-        gameState.consecutivePasses++;
-        updateLog(`${player.name} passou o turno.`);
-    } else {
-        gameState.consecutivePasses = 0;
-    }
-    
-    const activePlayers = playerIds.filter(id => !gameState.players[id].isEliminated);
-    if (gameState.consecutivePasses >= activePlayers.length) {
-        updateLog("Todos os jogadores passaram consecutivamente. Fim da rodada.");
-        await resolveRound();
-        return;
-    }
-
-    let currentIndex = playerIds.indexOf(gameState.currentPlayer);
-    let nextPlayer;
-    do {
-        currentIndex = (currentIndex + 1) % playerIds.length;
-        nextPlayer = gameState.players[playerIds[currentIndex]];
-    } while (nextPlayer.isEliminated);
-    
-    gameState.currentPlayer = nextPlayer.id;
-    gameState.selectedCard = null;
-    gameState.playedAnyCardThisTurn = false;
-
-    updateLog(`--- Vez de ${nextPlayer.name} ---`);
-    gameState.gamePhase = 'playing';
-
-    if (nextPlayer.isHuman) {
+    if (newCurrentPlayer.isHuman) {
         await showTurnIndicator();
-        renderAll();
+        updateTurnIndicator();
     } else {
-        await executeAiTurn(nextPlayer);
+        updateTurnIndicator();
+        await executeAiTurn(newCurrentPlayer);
     }
-};
-
-const beginPathSelectionSequence = async () => {
-    // This function is no longer called, but kept for potential future use.
-    console.warn("beginPathSelectionSequence called, but should be handled by startNewRound now.");
-};
-
-/**
- * Checks for collisions at the start of a round in the final battle.
- * @returns {boolean} True if the game is over due to a collision.
- */
-function checkStartOfRoundCollisions() {
-    const { gameState } = getState();
-    const player1 = gameState.players['player-1'];
-    const versatrix = Object.values(gameState.players).find(p => p.aiType === 'versatrix');
-    const necros = Object.values(gameState.players).filter(p => p.aiType === 'necroverso_final' && !p.isEliminated);
-
-    let gameOver = false;
-
-    for (const necro of necros) {
-        // Check collision with Player 1
-        if (player1 && !player1.isEliminated && player1.pathId === necro.pathId && player1.position === necro.position) {
-            document.dispatchEvent(new CustomEvent('storyWinLoss', { detail: { battle: 'necroverso_final', won: false, reason: 'collision' }}));
-            gameOver = true;
-            break; // Stop checking if game is over
-        }
-
-        // Check collision with Versatrix
-        if (versatrix && !versatrix.isEliminated && versatrix.pathId === necro.pathId && versatrix.position === necro.position) {
-            versatrix.isEliminated = true;
-            gameState.versatrixPowerDisabled = true;
-            updateLog(`Versatrix foi alcançada por um Necroverso e foi eliminada! Seus poderes se foram.`);
-            // Neutralize yellow spaces
-            gameState.boardPaths.forEach(path => {
-                path.spaces.forEach(space => {
-                    if (space.color === 'yellow') {
-                        space.color = 'white';
-                        space.effectName = null;
-                    }
-                });
-            });
-            renderBoard();
-            renderPlayerArea(versatrix);
-        }
-    }
-    return gameOver;
 }
 
-const startNewRound = async (isFirstRound = false) => {
-    const { gameState, achievements } = getState();
-    if (gameState.gamePhase === 'game_over') return;
-    if (!isFirstRound) gameState.turn++;
-    
-    if (gameState.isFinalBoss && !isFirstRound) {
-        if (checkStartOfRoundCollisions()) {
-            return; // Game over was triggered
-        }
+function getStandardAiMove(player, gameState) {
+    const valueCardsInHand = player.hand.filter(c => c.type === 'value');
+    const mustPlayValueCard = valueCardsInHand.length >= 2 && !player.playedValueCardThisTurn;
+
+    if (mustPlayValueCard) {
+        valueCardsInHand.sort((a, b) => a.value - b.value);
+        const cardToPlay = player.status === 'winning' ? valueCardsInHand[0] : valueCardsInHand[valueCardsInHand.length - 1];
+        return { action: 'play_card', cardId: cardToPlay.id, targetId: player.id };
     }
 
+    const winningPlayer = Object.values(gameState.players).reduce((prev, curr) => (prev.position > curr.position) ? prev : curr);
+    const effectCardsInHand = player.hand.filter(c => c.type === 'effect');
+
+    if (effectCardsInHand.length > 0) {
+        const defensivePlay = effectCardsInHand.find(c => c.name === 'Menos' || c.name === 'Desce');
+        if (defensivePlay) {
+            return { action: 'play_card', cardId: defensivePlay.id, targetId: winningPlayer.id };
+        }
+        const offensivePlay = effectCardsInHand.find(c => c.name === 'Mais' || c.name === 'Sobe');
+        if (offensivePlay) {
+            return { action: 'play_card', cardId: offensivePlay.id, targetId: player.id };
+        }
+    }
+    
+    return { action: 'pass_turn' };
+}
+
+export async function executeAiTurn(player) {
+    const { gameState } = getState();
+    gameState.gamePhase = 'paused';
+    updateTurnIndicator();
+    await new Promise(res => setTimeout(res, 1000 + Math.random() * 1500));
+    await tryToSpeak(player);
+
+    let move;
+    try {
+        move = await getGeminiAiMove(player, gameState);
+        if (!move || !move.action) {
+            throw new Error("Gemini returned invalid move, falling back to standard AI.");
+        }
+        updateLog(`(Gemini) ${player.name} está agindo...`);
+    } catch (error) {
+        console.warn(`Gemini AI failed for ${player.name}. Error:`, error.message);
+        updateLog(`${player.name} está agindo (Padrão)...`);
+        move = getStandardAiMove(player, gameState);
+    }
+    
+    gameState.gamePhase = 'playing';
+    
+    if (move.action === 'pass_turn') {
+        await advanceToNextPlayer();
+    } else if (move.action === 'play_card' && move.cardId) {
+        const cardToPlay = player.hand.find(c => c.id === move.cardId);
+        if (cardToPlay) {
+            let targetId = move.targetId || player.id;
+            // Validate target
+            if (!gameState.players[targetId]) {
+                console.warn(`AI tried to target invalid player ${targetId}, defaulting to self.`);
+                targetId = player.id;
+            }
+            
+            if (cardToPlay.name === 'Reversus') {
+                await playCard(player, cardToPlay, targetId, move.effectTypeToReverse || 'score');
+            } else {
+                await playCard(player, cardToPlay, targetId, null, move.options);
+            }
+            await advanceToNextPlayer();
+        } else {
+            console.error(`${player.name} AI tried to play card ID ${move.cardId} which it doesn't have. Passing.`);
+            await advanceToNextPlayer();
+        }
+    }
+}
+
+async function startNewRound(isFirstRound = false) {
+    const { gameState } = getState();
+    updateLog(`--- Iniciando Rodada ${gameState.turn} ---`);
+
+    // Reset round-specific state
+    gameState.consecutivePasses = 0;
     gameState.reversusTotalActive = false;
-    dom.appContainerEl.classList.remove('reversus-total-active');
-    dom.reversusTotalIndicatorEl.classList.add('hidden');
-    const { toggleReversusTotalBackground } = await import('./animations.js');
     toggleReversusTotalBackground(false);
+    dom.reversusTotalIndicatorEl.classList.add('hidden');
     gameState.activeFieldEffects = [];
     gameState.revealedHands = [];
-    gameState.consecutivePasses = 0;
     gameState.player1CardsObscured = false;
     gameState.reversumAbilityUsedThisRound = false;
     gameState.necroXUsedThisRound = false;
-
-    const playerIds = gameState.playerIdsInGame;
-    playerIds.forEach(id => {
-        const p = gameState.players[id];
-        
-        if (p.resto && !isFirstRound) {
-            gameState.decks.value.push(p.resto);
-        }
-        
-        if (p.nextResto) {
-            p.resto = p.nextResto;
-        } else if (!isFirstRound) {
-            if (gameState.isFinalBoss) {
-                if (gameState.decks.value.length > 0) p.resto = gameState.decks.value.pop();
-            } else {
-                p.resto = null;
-            }
-        }
-        p.nextResto = null;
-        
-        // Return played value cards to deck
-        gameState.decks.value.push(...p.playedCards.value);
-        
-        // Filter out temporary locked cards before returning effect cards to deck
-        const realEffectCards = p.playedCards.effect.filter(c => !c.isLocked);
-        gameState.decks.effect.push(...realEffectCards);
-        
-        p.playedCards.value = [];
-        p.playedCards.effect = [];
-        
-        p.effects = { score: null, movement: null };
-        p.playedValueCardThisTurn = false;
-        p.targetPathForPula = null;
-
-        if (gameState.isInversusMode) {
-            p.pathId = -1;
-        }
-    });
-
-    gameState.decks.value = shuffle(gameState.decks.value);
-    gameState.decks.effect = shuffle(gameState.decks.effect);
-    
-    renderBoard(); // Render empty board before path selection
-
-    // Draw cards BEFORE triggering field effects
-    playerIds.forEach(id => {
-        const p = gameState.players[id];
-        if (p.isEliminated) return;
-        const valueCardsNeeded = config.MAX_VALUE_CARDS_IN_HAND - p.hand.filter(c => c.type === 'value').length;
-        const effectCardsNeeded = config.MAX_EFFECT_CARDS_IN_HAND - p.hand.filter(c => c.type === 'effect').length;
-        for (let i = 0; i < valueCardsNeeded; i++) if (gameState.decks.value.length > 0) p.hand.push(gameState.decks.value.pop());
-        for (let i = 0; i < effectCardsNeeded; i++) if (gameState.decks.effect.length > 0) p.hand.push(gameState.decks.effect.pop());
-    });
-
-    // Add Versatrix Card if conditions are met
-    if (gameState.isFinalBoss && achievements.has('versatrix_card_collected')) {
-        const player = gameState.players['player-1'];
-        const hasCardAlready = player.hand.some(c => c.name === 'Carta da Versatrix');
-        if (!hasCardAlready && (gameState.turn - 1) % 3 === 0) {
-            player.hand.push({ id: Date.now() + Math.random(), type: 'effect', name: 'Carta da Versatrix' });
-            updateLog("Uma ajuda inesperada... A Carta da Versatrix apareceu em sua mão!");
-        }
+    if (gameState.isXaelChallenge && gameState.players['player-1'].xaelStarPowerCooldown > 0) {
+        gameState.players['player-1'].xaelStarPowerCooldown--;
     }
 
 
-    if (gameState.isInversusMode) {
-        const player1Hand = gameState.players['player-1'].hand;
-        gameState.players['player-2'].hand = JSON.parse(JSON.stringify(player1Hand));
-        updateLog("A mão do Inversus espelhou a sua!");
+    // Reset players for the new round
+    Object.values(gameState.players).forEach(player => {
+        player.playedCards = { value: [], effect: [] };
+        player.playedValueCardThisTurn = false;
+        player.effects = { score: null, movement: null };
+        if (player.nextResto) {
+            player.resto = player.nextResto;
+            player.nextResto = null;
+        }
+    });
+
+    // Deal cards
+    Object.values(gameState.players).forEach(player => {
+        while (player.hand.filter(c => c.type === 'value').length < config.MAX_VALUE_CARDS_IN_HAND) {
+            if (gameState.decks.value.length === 0) break;
+            player.hand.push(gameState.decks.value.pop());
+        }
+        while (player.hand.filter(c => c.type === 'effect').length < config.MAX_EFFECT_CARDS_IN_HAND) {
+            if (gameState.decks.effect.length === 0) break;
+            player.hand.push(gameState.decks.effect.pop());
+        }
+    });
+
+    if (gameState.currentStoryBattle === 'tutorial_necroverso' && isFirstRound) {
+        gameState.tutorialEffectCardsLocked = true;
     }
     
-    // Now trigger field effects
+    updateState('roundStartStateSnapshot', structuredClone(gameState));
+    renderAll();
+    
+    // Field effects trigger after setup and render
     await triggerFieldEffects();
     
-    const player = gameState.players[gameState.currentPlayer];
     gameState.gamePhase = 'playing';
-    gameState.playedAnyCardThisTurn = false;
-    updateLog(`--- Começando Rodada ${gameState.turn} (Vez de ${player.name}) ---`);
-
-    // Use a robust deep copy for the round snapshot
-    updateState('roundStartStateSnapshot', JSON.parse(JSON.stringify(gameState)));
-    
     renderAll();
-    if (player.isHuman) await showTurnIndicator();
-    else await executeAiTurn(player);
-};
+    
+    const currentPlayer = gameState.players[gameState.currentPlayer];
+    if (currentPlayer.isHuman) {
+        await showTurnIndicator();
+        updateTurnIndicator();
+    } else {
+        await executeAiTurn(currentPlayer);
+    }
+}
 
-const endGameCheck = async () => {
-    const { gameState, gameStartTime } = getState();
-    const elapsedMinutes = gameStartTime ? (Date.now() - gameStartTime) / 60000 : 0;
-    const playerIds = gameState.playerIdsInGame;
+async function checkRoundEnd() {
+    const { gameState } = getState();
+    const totalPlayers = gameState.playerIdsInGame.filter(id => !gameState.players[id].isEliminated).length;
+    if (gameState.consecutivePasses >= totalPlayers) {
+        await resolveRound();
+        return true;
+    }
+    return false;
+}
 
-    if (gameState.isInversusMode) {
+async function resolveRound() {
+    const { gameState } = getState();
+    gameState.gamePhase = 'resolution';
+    updateTurnIndicator();
+    updateLog('Todos passaram. Resolvendo a rodada...');
+
+    const scores = {};
+    let highestScore = -Infinity;
+    
+    Object.values(gameState.players).forEach(p => {
+        let score = p.playedCards.value.reduce((sum, card) => sum + card.value, 0);
+        const restoValue = p.resto ? p.resto.value : 0;
+        
+        if (p.effects.score === 'Mais') score += restoValue;
+        if (p.effects.score === 'Menos') score -= restoValue;
+        if (p.effects.score === 'NECRO X') score += 10;
+        if (p.effects.score === 'NECRO X Invertido') score -= 10;
+
+        scores[p.id] = score;
+        if (!p.isEliminated && score > highestScore) {
+            highestScore = score;
+        }
+    });
+
+    let winners = gameState.playerIdsInGame.filter(id => !gameState.players[id].isEliminated && scores[id] === highestScore);
+    
+    if (gameState.gameMode === 'duo') {
+        const teamScores = calculateTeamScores(scores);
+        const winningTeam = teamScores.teamA > teamScores.teamB ? 'A' : 'B';
+        winners = winningTeam === 'A' ? config.TEAM_A.filter(id => gameState.playerIdsInGame.includes(id)) : config.TEAM_B.filter(id => gameState.playerIdsInGame.includes(id));
+        updateLog(`Pontuação da Equipe A: ${teamScores.teamA}, Pontuação da Equipe B: ${teamScores.teamB}. Equipe ${winningTeam} venceu a rodada.`);
+    }
+
+    await showRoundSummaryModal(winners, scores);
+
+    // Apply movement
+    Object.values(gameState.players).forEach(p => {
+        if(p.isEliminated) return;
+        const isWinner = winners.includes(p.id);
+        if (isWinner) p.position++;
+        if (p.effects.movement === 'Sobe') p.position++;
+        if (p.effects.movement === 'Desce') p.position = Math.max(1, p.position - 1);
+        if (p.effects.movement === 'Pula') p.pathId = p.targetPathForPula;
+        p.position = Math.min(config.WINNING_POSITION, p.position);
+    });
+    
+    // Speed run achievement check
+    if(gameState.turn <= 3 && gameState.players['player-1'].position >= config.WINNING_POSITION) {
+        grantAchievement('speed_run');
+    }
+
+    renderBoard();
+    await new Promise(res => setTimeout(res, 1000));
+    
+    if (checkWinCondition()) return;
+
+    gameState.turn++;
+    await startNewRound();
+}
+
+function calculateTeamScores(scores) {
+    const teamA_ids = config.TEAM_A.filter(id => getState().gameState.playerIdsInGame.includes(id));
+    const teamB_ids = config.TEAM_B.filter(id => getState().gameState.playerIdsInGame.includes(id));
+    
+    const teamA = teamA_ids.reduce((sum, id) => sum + (scores[id] || 0), 0);
+    const teamB = teamB_ids.reduce((sum, id) => sum + (scores[id] || 0), 0);
+    return { teamA, teamB };
+}
+
+
+function checkWinCondition() {
+    const { gameState } = getState();
+    
+    // Check win condition for Xael challenge
+    if (gameState.isXaelChallenge) {
         const player1 = gameState.players['player-1'];
-        const inversus = gameState.players['player-2'];
-        if (player1.hearts <= 0) {
-            showGameOver('Você perdeu todos os corações. Inversus venceu!');
-            grantAchievement('first_defeat');
-            return;
+        const xael = gameState.players['player-2'];
+        if (player1.position >= config.WINNING_POSITION || xael.position >= config.WINNING_POSITION) {
+            const playerWon = player1.stars > xael.stars;
+            document.dispatchEvent(new CustomEvent('storyWinLoss', { detail: { battle: 'xael_challenge', won: playerWon } }));
+            return true;
         }
-        if (inversus.hearts <= 0) {
-            grantAchievement('first_win');
-            grantAchievement('inversus_win');
+    }
+    
+    // Check win condition for Necroverso King battle
+    if (gameState.currentStoryBattle === 'necroverso_king') {
+        const kings = [gameState.players['player-2'], gameState.players['player-3'], gameState.players['player-4']];
+        if (kings.every(k => k && k.isEliminated)) {
+            document.dispatchEvent(new CustomEvent('storyWinLoss', { detail: { battle: 'necroverso_king', won: true } }));
+            return true; // Game is over
+        }
+    }
+    
+    if (gameState.isInversusMode) {
+        if (gameState.players['player-1'].hearts <= 0) {
+            showGameOver("Você foi derrotado...", "Fim de Jogo!");
+            return true;
+        }
+        if (gameState.players['player-2'].hearts <= 0) {
             showInversusVictoryAnimation();
-            return;
+            grantAchievement('inversus_win');
+            return true;
         }
-    } else if (gameState.isStoryMode) {
-        // The final boss has a unique win condition (hearts), handled in resolveRound.
-        // This check prevents it from falling through to position-based checks.
-        if (gameState.isFinalBoss) {
-            if (gameState.gamePhase !== 'game_over') {
-                 await startNewRound();
-            }
-            return;
-        }
-        
-        // --- Position-based win checks for all other story battles ---
-        let winner = null;
-        const player1Won = gameState.players['player-1'].position >= config.WINNING_POSITION;
-        
-        // Check if any opponent has reached the end. This is robust for 1v1, 1v2, 1v3, etc.
-        const opponentWon = playerIds
-            .filter(id => id !== 'player-1')
-            .some(id => gameState.players[id] && gameState.players[id].position >= config.WINNING_POSITION);
+    }
 
-        if (player1Won) {
-            winner = 'player';
-        } else if (opponentWon) {
-            winner = 'opponent';
+    const winningPlayers = Object.values(gameState.players).filter(p => p.position >= config.WINNING_POSITION);
+    if (winningPlayers.length > 0) {
+        if (gameState.isStoryMode) {
+            const playerWon = winningPlayers.some(p => p.id === 'player-1');
+            document.dispatchEvent(new CustomEvent('storyWinLoss', { detail: { battle: gameState.currentStoryBattle, won: playerWon } }));
+        } else {
+            const winnerNames = winningPlayers.map(p => p.name).join(' e ');
+            showGameOver(`${winnerNames} venceu o jogo!`);
         }
+        return true;
+    }
+    return false;
+}
 
-        if (winner) {
-            // Dispatch event to handle story progression and modals
-            document.dispatchEvent(new CustomEvent('storyWinLoss', { detail: { battle: gameState.currentStoryBattle, won: (winner === 'player') } }));
-            return; // Game over, stop processing
-        }
+export function updateLiveScoresAndWinningStatus() {
+    const { gameState } = getState();
+    if (!gameState) return;
+    
+    let scores = {};
+    let highestScore = -Infinity, lowestScore = Infinity;
+
+    Object.values(gameState.players).forEach(p => {
+        let score = p.playedCards.value.reduce((sum, card) => sum + card.value, 0);
+        const restoValue = p.resto ? p.resto.value : 0;
         
-    } else { // Standard (non-story) game modes
-        let gameOver = false;
-        let winnerMsg = "";
-    
-        if (gameState.gameMode === 'solo') {
-            const winners = playerIds.map(id => gameState.players[id]).filter(p => p.position >= config.WINNING_POSITION);
-            if (winners.length > 0) {
-                gameOver = true;
-                winnerMsg = `Fim de Jogo! ${winners.map(w => w.name).join(' e ')} venceu!`;
-            }
-        } else if (gameState.gameMode === 'duo') {
-            const teamA_Win = config.TEAM_A.filter(id => playerIds.includes(id)).every(id => gameState.players[id].position >= config.WINNING_POSITION);
-            const teamB_Win = config.TEAM_B.filter(id => playerIds.includes(id)).every(id => gameState.players[id].position >= config.WINNING_POSITION);
-    
-            if (teamA_Win || teamB_Win) {
-                gameOver = true;
-                if (teamA_Win && teamB_Win) winnerMsg = "Empate incrível! Ambas as equipes venceram!";
-                else if (teamA_Win) winnerMsg = "Equipe Azul/Verde (Você & Jogador 3) venceu!";
-                else winnerMsg = "Equipe Vermelho/Amarelo (Jogador 2 & Jogador 4) venceu!";
-            }
+        if (p.effects.score === 'Mais') score += restoValue;
+        if (p.effects.score === 'Menos') score -= restoValue;
+        if (p.effects.score === 'NECRO X') score += 10;
+        if (p.effects.score === 'NECRO X Invertido') score -= 10;
+
+        scores[p.id] = score;
+        p.liveScore = score; // Update live score on player object
+        if (!p.isEliminated) {
+            highestScore = Math.max(highestScore, score);
+            lowestScore = Math.min(lowestScore, score);
         }
-    
-        if (gameOver) {
-            showGameOver(winnerMsg);
-            if (!gameState.isInversusMode) {
-                 grantAchievement('first_win');
-                if (elapsedMinutes < 5) {
-                    grantAchievement('speed_run');
+    });
+
+    if (gameState.gameMode === 'duo') {
+        const teamScores = calculateTeamScores(scores);
+        const isTeamAWinner = teamScores.teamA > teamScores.teamB;
+        const isTeamBWinner = teamScores.teamB > teamScores.teamA;
+        
+        config.TEAM_A.forEach(id => {
+            if (gameState.players[id]) gameState.players[id].status = isTeamAWinner ? 'winning' : (isTeamBWinner ? 'losing' : 'neutral');
+        });
+        config.TEAM_B.forEach(id => {
+            if (gameState.players[id]) gameState.players[id].status = isTeamBWinner ? 'winning' : (isTeamAWinner ? 'losing' : 'neutral');
+        });
+
+    } else {
+        Object.values(gameState.players).forEach(p => {
+            if (p.isEliminated) {
+                p.status = 'neutral';
+                return;
+            }
+            if (scores[p.id] === highestScore && highestScore > lowestScore) {
+                p.status = 'winning';
+            } else if (scores[p.id] === lowestScore && highestScore > lowestScore) {
+                p.status = 'losing';
+            } else {
+                p.status = 'neutral';
+            }
+        });
+    }
+
+    // Update side score boxes dynamically
+    if (dom.leftScoreBox && dom.rightScoreBox && !gameState.isInversusMode) {
+        // Player 1 is always on the left
+        const p1Score = scores['player-1'] || 0;
+        dom.leftScoreBox.className = 'side-score-box player-1-score';
+        dom.leftScoreValue.textContent = p1Score;
+        
+        // Find the leading opponent for the right box
+        const opponentIds = gameState.playerIdsInGame.filter(id => id !== 'player-1' && !gameState.players[id].isEliminated);
+        
+        if (gameState.gameMode === 'duo') {
+            const teamScores = calculateTeamScores(scores);
+            dom.leftScoreBox.className = 'side-score-box team-a-score';
+            dom.rightScoreBox.className = 'side-score-box team-b-score';
+            dom.leftScoreValue.textContent = teamScores.teamA;
+            dom.rightScoreValue.textContent = teamScores.teamB;
+        } else if (opponentIds.length > 0) {
+            let leadingOpponentId = opponentIds[0];
+            opponentIds.forEach(id => {
+                if (scores[id] > scores[leadingOpponentId]) {
+                    leadingOpponentId = id;
                 }
-            }
-            return; // Stop execution
+            });
+            
+            const leadingOpponentScore = scores[leadingOpponentId] || 0;
+            const pIdNum = parseInt(leadingOpponentId.split('-')[1]);
+            dom.rightScoreBox.className = `side-score-box player-${pIdNum}-score`;
+            dom.rightScoreValue.textContent = leadingOpponentScore;
+            dom.rightScoreBox.classList.remove('hidden');
+        } else {
+            // Hide opponent score if there are no opponents (e.g., after elimination)
+            dom.rightScoreBox.classList.add('hidden');
         }
     }
+}
 
-    // If no one has won yet in any mode, start the next round.
-    if (gameState.gamePhase !== 'game_over') {
-        await startNewRound();
-    }
-};
-
-
-/**
- * Initializes the PvP room data.
- */
-export const setupPvpRooms = () => {
-    const { pvpRooms } = getState();
-    if (pvpRooms.length > 0) return;
-    
-    const rooms = [];
-    for (let i = 1; i <= 12; i++) {
-        const playerCount = 0; // All rooms start empty for testing
-        const room = {
-            id: i,
-            players: playerCount,
-            password: (i === 12) ? 'Final' : null,
-            mode: 'N/A'
+export function setupPvpRooms() {
+    const rooms = Array.from({ length: 12 }, (_, i) => {
+        const roomId = i + 1;
+        const isSpecialRoom = roomId === 12;
+        return {
+            id: roomId,
+            players: isSpecialRoom ? 1 : 4, // Room 12 has 1 player, others are full
+            mode: ['1 vs 1', '1 vs 2', '2 vs 2'][Math.floor(Math.random() * 3)],
+            password: isSpecialRoom ? 'Final' : null
         };
-        rooms.push(room);
-    }
+    });
     updateState('pvpRooms', rooms);
-};
+}

@@ -260,11 +260,19 @@
 }
 @keyframes inversus-scale-pulse {
   0%, 100% {
-    transform: translateX(-50%) scale(1.0);
+    transform: translateX(-50%) scale(2.0);
   }
   50% {
-    transform: translateX(-50%) scale(1.05);
+    transform: translateX(-50%) scale(2.1);
   }
+}
+
+@keyframes inversus-text-glow {
+  0%   { text-shadow: 0 0 8px var(--accent-red), 0 0 4px #fff; }
+  25%  { text-shadow: 0 0 8px var(--accent-blue), 0 0 4px #fff; }
+  50%  { text-shadow: 0 0 8px var(--accent-green), 0 0 4px #fff; }
+  75%  { text-shadow: 0 0 8px var(--accent-yellow), 0 0 4px #fff; }
+  100% { text-shadow: 0 0 8px var(--accent-red), 0 0 4px #fff; }
 }
 
 @keyframes glitch-anim {
@@ -304,6 +312,43 @@
     0% { opacity: 1; }
     50% { opacity: 0.95; }
     100% { opacity: 1; }
+}
+
+@keyframes xael-popup-anim {
+    0% { transform: translateX(100%); opacity: 0; }
+    20% { transform: translateX(0); opacity: 1; }
+    80% { transform: translateX(0); opacity: 1; }
+    100% { transform: translateX(100%); opacity: 0; }
+}
+
+@keyframes twinkle {
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+    box-shadow: 0 0 8px #fff, 0 0 12px #fff, 0 0 16px var(--primary-color);
+  }
+}
+
+@keyframes star-power-glow {
+    0%, 100% {
+        text-shadow: 0 0 4px #fff, 0 0 8px #ffd700, 0 0 12px #ffd700;
+        transform: scale(1);
+    }
+    50% {
+        text-shadow: 0 0 6px #fff, 0 0 12px #ffff00, 0 0 18px #ffff00;
+        transform: scale(1.1);
+    }
+}
+
+@keyframes star-pulse {
+    0%, 100% {
+        transform: scale(1);
+        text-shadow: 0 0 5px #fff, 0 0 10px #ff0;
+    }
+    50% {
+        transform: scale(1.2);
+        text-shadow: 0 0 10px #fff, 0 0 20px #ff0;
+    }
 }
 
 
@@ -354,26 +399,11 @@ body.screen-shaking {
 
 /* Monitor Effect for Narrator Battle */
 .app-container.effect-monitor {
-    animation: monitor-flicker-anim 0.2s infinite;
+    filter: grayscale(1);
 }
 .app-container.effect-monitor::after {
     content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background:
-        repeating-linear-gradient(
-            0deg,
-            rgba(0, 0, 0, 0.2) 0,
-            rgba(0, 0, 0, 0.2) 1px,
-            transparent 1px,
-            transparent 2px
-        ),
-        rgba(30, 150, 80, 0.15); /* Greenish tint */
-    pointer-events: none;
-    z-index: 2000;
+    display: none;
 }
 
 .app-container.reversus-total-active {
@@ -454,6 +484,7 @@ body.screen-shaking {
 .log-message.speaker-contravox { color: var(--accent-green); text-shadow: 0 0 3px var(--accent-green);}
 .log-message.speaker-versatrix { color: var(--accent-yellow); text-shadow: 0 0 3px var(--accent-yellow);}
 .log-message.speaker-reversum { color: var(--accent-red); text-shadow: 0 0 3px var(--accent-red);}
+.log-message.speaker-xael { color: var(--text-primary); text-shadow: 0 0 3px #fff;}
 .log-message.speaker-necroverso_tutorial,
 .log-message.speaker-necroverso,
 .log-message.speaker-necroverso_king,
@@ -721,7 +752,26 @@ body.screen-shaking {
 .board-space.space-yellow { background-color: #fffb8f; color: #000; }
 .board-space.space-black { background-color: #111; color: #111; border-color: var(--accent-purple); box-shadow: inset 0 0 8px var(--accent-purple); }
 .board-space.used { background-color: #708090; color: #ccc; box-shadow: none; border-color: #888; }
+.board-space.space-star {
+    background-color: #222;
+    border-color: #ffd700;
+    font-size: 1.5rem;
+    color: #ffd700;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.board-space.space-star.used {
+    color: #555;
+    background-color: #333;
+    animation: none;
+    text-shadow: none;
+}
 
+.star-icon {
+    display: inline-block;
+    animation: star-pulse 2s infinite ease-in-out;
+}
 
 .pawn-container {
     display: flex;
@@ -746,6 +796,7 @@ body.screen-shaking {
 .pawn.player-3 { background-color: var(--player-3-color); box-shadow: 0 0 10px 2px var(--player-3-color), inset 0 0 4px rgba(255, 255, 255, 0.7); }
 .pawn.player-4 { background-color: var(--player-4-color); box-shadow: 0 0 10px 2px var(--player-4-color), inset 0 0 4px rgba(255, 255, 255, 0.7); }
 .pawn.necro { background-color: #212121; border-color: #fff; box-shadow: 0 0 10px 2px var(--accent-purple), inset 0 0 4px rgba(255, 255, 255, 0.7); }
+.pawn.xael { background-color: #fff; border-color: #000; box-shadow: 0 0 10px 2px #fff, inset 0 0 4px rgba(0, 0, 0, 0.7); }
 
 
 /* --- PLAYER ZONES --- */
@@ -770,7 +821,8 @@ body.screen-shaking {
     height: 100%;
     background-color: rgba(50, 50, 50, 0.8);
     backdrop-filter: grayscale(1);
-    color: var(--accent-red);
+    color: #212121;
+    text-shadow: 0 0 5px rgba(255, 255, 255, 0.7);
     font-size: 10rem;
     font-weight: bold;
     display: flex;
@@ -784,19 +836,24 @@ body.screen-shaking {
 .player-area.p2-bg { background-color: #f5dcdc; border-color: #d6baba; }
 .player-area.p3-bg { background-color: #ddeadb; border-color: #c4d1c1; }
 .player-area.p4-bg { background-color: #fcf6d7; border-color: #e3dcb8; }
+.player-area.xael-portrait-bg { background-color: #ffffff; border-color: #cccccc; color: #111; }
 
-.player-area-necro-tutorial,
-.narrator-portrait {
+
+.player-area-necro-tutorial {
     background-color: #696969;
     border-color: #4a4a4a;
 }
 
-.player-area-necro-final { 
-    background-color: black !important; /* Use important to override class-based colors */
+.player-area-necro-final,
+.player-area.inversus-bg { 
+    background-color: black !important;
     border-color: #555 !important;
     color: var(--text-primary) !important;
 }
-.player-area-necro-final .play-zone-slot:not(:has(.card))::before { color: rgba(255,255,255,0.4); }
+.player-area-necro-final .play-zone-slot:not(:has(.card))::before,
+.player-area.inversus-bg .play-zone-slot:not(:has(.card))::before { 
+    color: rgba(255,255,255,0.4); 
+}
 
 .player-area.active {
     border-color: #fbc02d;
@@ -824,9 +881,13 @@ body.screen-shaking {
     position: relative;
     z-index: 2; /* Ensure header is above portrait */
 }
+.player-area.xael-portrait-bg .player-header,
 .player-area-necro-final .player-header,
-.narrator-portrait .player-header {
+.player-area.inversus-bg .player-header {
     border-bottom: 1px solid rgba(255,255,255,0.2);
+}
+.player-area.xael-portrait-bg .player-header {
+    border-bottom-color: rgba(0,0,0,0.2);
 }
 
 .player-header-left { display: flex; flex-direction: column; gap: 0.25rem; }
@@ -848,16 +909,23 @@ body.screen-shaking {
     letter-spacing: 2px;
     animation: heart-glow 1.5s infinite ease-in-out;
 }
+.player-star-counter {
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: var(--accent-yellow);
+    text-shadow: 0 0 5px var(--accent-yellow);
+}
 
 .player-name.player-1 { color: var(--player-1-color); }
 .player-name.player-2 { color: var(--player-2-color); }
 .player-name.player-3 { color: var(--player-3-color); }
 .player-name.player-4 { color: var(--player-4-color); }
 .player-name.necro { color: #212121; }
+.player-name.xael { color: #333; }
 .player-area-necro-final .player-name.necro,
-.narrator-portrait .player-name.player-2 { /* Narrator uses p2 slot */
-    color: var(--text-primary);
-    text-shadow: 0 0 5px var(--accent-purple);
+.player-name.inversus-name-glow {
+    color: var(--text-primary) !important;
+    animation: inversus-text-glow 4s infinite ease-in-out;
 }
 
 
@@ -924,10 +992,15 @@ body.screen-shaking {
     white-space: nowrap;
 }
 
+.player-area.xael-portrait-bg .player-stats,
 .player-area-necro-final .player-stats,
-.narrator-portrait .player-stats {
+.player-area.inversus-bg .player-stats {
     background: rgba(255,255,255,0.1);
 }
+.player-area.xael-portrait-bg .player-stats {
+     background: rgba(0,0,0,0.1);
+}
+
 
 .player-stats .stat-item {
     display: inline-flex;
@@ -942,7 +1015,7 @@ body.screen-shaking {
 }
 
 .player-area-necro-final .player-stats .stat-item strong,
-.narrator-portrait .player-stats .stat-item strong {
+.player-area.inversus-bg .player-stats .stat-item strong {
     color: var(--text-primary);
 }
 
@@ -974,9 +1047,14 @@ body.screen-shaking {
     position: relative;
     z-index: 2; /* Ensure play-zone is above portrait */
 }
+
+.player-area.xael-portrait-bg .play-zone,
 .player-area-necro-final .play-zone,
-.narrator-portrait .play-zone {
+.player-area.inversus-bg .play-zone {
     background-color: rgba(255,255,255,0.1);
+}
+.player-area.xael-portrait-bg .play-zone {
+    background-color: rgba(0,0,0,0.1);
 }
 
 #player-1-area-container .player-hand {
@@ -1005,10 +1083,15 @@ body.screen-shaking {
     position: relative;
     min-width: 0;
 }
+.player-area.xael-portrait-bg .play-zone-slot,
 .player-area-necro-final .play-zone-slot,
-.narrator-portrait .play-zone-slot {
+.player-area.inversus-bg .play-zone-slot {
     border: 2px dashed rgba(255,255,255,0.2);
 }
+.player-area.xael-portrait-bg .play-zone-slot {
+    border-color: rgba(0,0,0,0.2);
+}
+
 
 .play-zone-slot:not(:has(.card))::before {
     content: attr(data-label);
@@ -1017,17 +1100,17 @@ body.screen-shaking {
     font-weight: 600;
     text-align: center;
 }
-
-.narrator-portrait .play-zone-slot:not(:has(.card))::before {
-    color: rgba(255,255,255,0.4);
+.player-area.xael-portrait-bg .play-zone-slot:not(:has(.card))::before {
+    color: rgba(0,0,0,0.4);
 }
+
 
 /* Story Battle Character Portrait */
 .player-area-character-portrait {
     position: absolute;
     bottom: 5px;
     left: 50%;
-    transform: translateX(-50%) scale(1.8);
+    transform: translateX(-50%) scale(2.2);
     width: 90%;
     height: auto;
     max-height: 70%;
@@ -1038,8 +1121,17 @@ body.screen-shaking {
     z-index: 1;
     filter: drop-shadow(2px 2px 5px rgba(0,0,0,0.5));
 }
+.player-area-character-portrait.xael-glow {
+    filter: drop-shadow(0 0 8px #fff) drop-shadow(0 0 15px #fff);
+    transform: translateX(-50%) scale(1.1);
+}
+.player-area-character-portrait.contravox-portrait {
+    transform: translateX(-50%) scale(1.1);
+}
+
 .player-area-character-portrait.effect-glitch {
     animation: glitch-skew 1s infinite linear alternate-reverse;
+    transform: translateX(-50%) scale(4.4);
 }
 .player-area-character-portrait.effect-glitch::before,
 .player-area-character-portrait.effect-glitch::after {
@@ -1067,7 +1159,7 @@ body.screen-shaking {
   position: absolute;
   bottom: 5px;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translateX(-50%) scale(2.0);
   width: 90%;
   height: auto;
   max-height: 70%;
@@ -1197,6 +1289,24 @@ body.screen-shaking {
     flex-direction: column;
     gap: 1rem;
 }
+
+#cosmic-glow-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
+}
+.star-particle {
+  position: absolute;
+  background-color: #fff;
+  border-radius: 50%;
+  animation: twinkle 4s infinite ease-in-out;
+}
+
 
 .splash-content {
     background: none;
@@ -1564,6 +1674,52 @@ body.screen-shaking {
 #tutorial-dialogue-options {
     justify-content: flex-start;
 }
+
+/* --- XAEL CHALLENGE --- */
+#xael-popup {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 120px;
+    height: 120px;
+    cursor: pointer;
+    z-index: 2100;
+    transform: translateX(150%);
+    animation: xael-popup-anim 2s ease-in-out forwards;
+}
+#xael-popup img {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    border: 3px solid #fff;
+    box-shadow: 0 0 15px #ffd700;
+}
+
+#xael-star-power {
+    position: fixed;
+    bottom: 10px;
+    right: 60px; /* Next to debug button */
+    background: none;
+    border: none;
+    color: #ffd700;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    z-index: 2000;
+    font-size: 2rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: all 0.3s ease;
+    animation: star-power-glow 2.5s infinite ease-in-out;
+}
+#xael-star-power.cooldown {
+    color: #555;
+    text-shadow: none;
+    cursor: not-allowed;
+    animation: none;
+}
+
 
 /* --- Debug & Sound --- */
 #debug-button {

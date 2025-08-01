@@ -19,25 +19,33 @@ export const initializeMusic = () => {
  */
 export const playSoundEffect = (effectName) => {
     const { soundState } = getState();
-    if (soundState.muted || !dom.sfxPlayer) return;
+    if (soundState.muted) return;
 
     let sfxSrc;
-    const wavEffects = ['conquista', 'confusao', 'campoinverso', 'x', 'destruido'];
+    let player = dom.sfxPlayer;
+    const wavEffects = ['conquista', 'confusao', 'campoinverso', 'x', 'destruido', 'xael'];
+    
     if (wavEffects.includes(effectName)) {
         sfxSrc = `${effectName}.wav`;
+        if (effectName === 'xael' && dom.popupSfxPlayer) {
+            player = dom.popupSfxPlayer;
+        }
     } else {
         sfxSrc = effectName.toLowerCase().replace(/\s/g, '') + '.ogg';
     }
-    dom.sfxPlayer.src = sfxSrc;
+
+    if (!player) return;
+    player.src = sfxSrc;
 
     let volume = soundState.volume;
     const loudEffects = ['mais', 'sobe', 'desce', 'menos', 'reversus', 'reversustotal'];
     if (loudEffects.includes(effectName.toLowerCase().replace(/\s/g, ''))) {
         volume = Math.min(1.0, soundState.volume * 1.5); // Boost volume for specific effects
     }
-    dom.sfxPlayer.volume = volume;
-    dom.sfxPlayer.play().catch(e => console.error(`Failed to play sound effect: ${sfxSrc}`, e));
+    player.volume = volume;
+    player.play().catch(e => console.error(`Failed to play sound effect: ${sfxSrc}`, e));
 };
+
 
 /**
  * Displays a large text announcement on the screen for special effects.

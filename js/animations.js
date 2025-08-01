@@ -1,8 +1,61 @@
+
+
 import * as dom from './dom.js';
 import * as config from './config.js';
 import { getState, updateState } from './state.js';
 import { shuffle } from './utils.js';
 import { playSoundEffect } from './sound.js';
+
+/**
+ * Animates a card moving from a starting element (in hand) to a target slot (in a play zone).
+ * @param {object} card - The card object being played.
+ * @param {HTMLElement} startElement - The card element in the player's hand.
+ * @param {string} targetPlayerId - The ID of the player whose play zone is the destination.
+ * @param {string} targetSlotLabel - The data-label of the target slot (e.g., 'Valor 1').
+ * @returns {Promise<void>} A promise that resolves when the animation is complete.
+ */
+export async function animateCardPlay(card, startElement, targetPlayerId, targetSlotLabel) {
+     return new Promise(resolve => {
+        const targetArea = document.getElementById(`player-area-${targetPlayerId}`);
+        if (!targetArea) {
+            resolve();
+            return;
+        }
+        
+        const targetSlot = targetArea.querySelector(`.play-zone-slot[data-label="${targetSlotLabel}"]`);
+        if (!startElement || !targetSlot) {
+            resolve();
+            return;
+        }
+
+        const startRect = startElement.getBoundingClientRect();
+        const endRect = targetSlot.getBoundingClientRect();
+
+        const clone = document.createElement('div');
+        clone.className = 'card card-animation-clone';
+        clone.style.backgroundImage = startElement.style.backgroundImage;
+        clone.style.width = `${startRect.width}px`;
+        clone.style.height = `${startRect.height}px`;
+        clone.style.top = `${startRect.top}px`;
+        clone.style.left = `${startRect.left}px`;
+        
+        document.body.appendChild(clone);
+        startElement.style.visibility = 'hidden';
+
+        requestAnimationFrame(() => {
+            clone.style.top = `${endRect.top}px`;
+            clone.style.left = `${endRect.left}px`;
+            clone.style.width = `${endRect.width}px`;
+            clone.style.height = `${endRect.height}px`;
+        });
+
+        setTimeout(() => {
+            clone.remove();
+            if (startElement) startElement.style.visibility = 'visible';
+            resolve();
+        }, 600); // Duration must match the transition time in index.css
+    });
+}
 
 /**
  * Creates a reusable starry background effect.
@@ -32,6 +85,31 @@ export function createStarryBackground(container, color = '#FFFFFF', starCount =
     }
 }
 
+/**
+ * Creates the cosmic glow overlay for the Xael challenge.
+ */
+export function createCosmicGlowOverlay() {
+    const container = dom.cosmicGlowOverlay;
+    if (!container) return;
+    container.innerHTML = ''; // Clear previous particles
+    const colors = ['#e63946', '#00b4d8', '#52b788', '#fca311', '#9b5de5', '#f1faee'];
+    
+    for (let i = 0; i < 70; i++) {
+        const particle = document.createElement('div');
+        particle.className = 'star-particle';
+        const size = Math.random() * 3 + 1;
+        particle.style.width = `${size}px`;
+        particle.style.height = `${size}px`;
+        particle.style.top = `${Math.random() * 100}%`;
+        particle.style.left = `${Math.random() * 100}%`;
+        const color = colors[Math.floor(Math.random() * colors.length)];
+        particle.style.setProperty('--primary-color', color);
+        particle.style.animationDelay = `${Math.random() * 4}s`;
+        particle.style.animationDuration = `${Math.random() * 2 + 2}s`;
+        container.appendChild(particle);
+    }
+    container.classList.remove('hidden');
+}
 
 /**
  * Triggers the animation for the Necro X ability.

@@ -1,8 +1,6 @@
-
-
-import * as dom from './dom.js';
 import { getState, updateState } from './state.js';
-import { playStoryMusic, stopStoryMusic, initializeMusic } from './sound.js';
+import * as dom from './dom.js';
+import { playStoryMusic, initializeMusic } from './sound.js';
 import { shatterImage, createStarryBackground } from './animations.js';
 
 const storyDialogue = {
@@ -152,9 +150,10 @@ const storyDialogue = {
     'final_confrontation_1': {
         character: 'Necroverso', image: 'necroversorevelado.png',
         text: "Eu não menti, darei a chance que retorne... porém, se me derrotar.",
-        options: [
-            { text: "Estava fácil demais...", next: 'necroverso_king_battle' },
-        ]
+        options: [{ 
+            text: "Estava fácil demais...", 
+            next: () => getState().storyState.lostToVersatrix ? 'versatrix_warning_1' : 'necroverso_king_battle' 
+        }]
     },
     'necroverso_king_battle': {
         isEndStory: true,
@@ -307,7 +306,8 @@ export const renderStoryNode = (nodeId) => {
                 const button = document.createElement('button');
                 button.className = 'control-button';
                 button.textContent = option.text;
-                button.onclick = () => renderStoryNode(option.next);
+                const nextNode = typeof option.next === 'function' ? option.next() : option.next;
+                button.onclick = () => renderStoryNode(nextNode);
                 dom.storyDialogueOptionsEl.appendChild(button);
             });
         } else if (node.isContinue) {

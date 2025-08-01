@@ -4,6 +4,8 @@ const appState = {
     gameState: null,
     // A snapshot of the game state at the beginning of a round, for the "Restart Round" feature.
     roundStartStateSnapshot: null,
+    // A snapshot of the game state before the Xael challenge begins.
+    preChallengeGameStateSnapshot: null,
     // Holds the user's sound preferences.
     soundState: { muted: false, volume: 0.5 },
     // Flag to ensure music is only initialized once.

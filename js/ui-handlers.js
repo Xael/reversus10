@@ -1,6 +1,5 @@
 
 
-
 import * as dom from './dom.js';
 import { getState, updateState } from './state.js';
 import * as game from './game.js';
@@ -16,7 +15,7 @@ import { shatterImage } from './animations.js';
 function handleCardClick(cardElement) {
     const { gameState } = getState();
     const cardId = parseFloat(cardElement.dataset.cardId);
-    if (gameState.currentPlayer !== 'player-1' || gameState.gamePhase !== 'playing' || isNaN(cardId)) {
+    if (!gameState || gameState.currentPlayer !== 'player-1' || gameState.gamePhase !== 'playing' || isNaN(cardId)) {
         return;
     }
 
@@ -34,7 +33,7 @@ function handleCardClick(cardElement) {
     }
 }
 
-function handlePlayerTargetSelection(targetId) {
+async function handlePlayerTargetSelection(targetId) {
     const { gameState } = getState();
     
     if (gameState.gamePhase === 'field_effect_targeting') {
@@ -82,7 +81,7 @@ function handlePlayerTargetSelection(targetId) {
         handlePulaCasterChoice(card, targetId);
     } else {
         gameState.gamePhase = 'playing';
-        game.playCard(gameState.players['player-1'], card, targetId);
+        await game.playCard(gameState.players['player-1'], card, targetId);
     }
 }
 
@@ -108,7 +107,7 @@ function handlePulaCasterChoice(card, targetId) {
     ui.updateTurnIndicator();
 }
 
-function handlePulaPathSelection(chosenPathId) {
+async function handlePulaPathSelection(chosenPathId) {
     const { gameState } = getState();
     if (!gameState.pulaTarget) return;
     const { card, targetPlayerId } = gameState.pulaTarget;
@@ -118,7 +117,7 @@ function handlePulaPathSelection(chosenPathId) {
     
     dom.pulaModal.classList.add('hidden');
     gameState.gamePhase = 'playing';
-    game.playCard(gameState.players['player-1'], card, targetPlayerId);
+    await game.playCard(gameState.players['player-1'], card, targetPlayerId);
 }
 
 export function initializeUiHandlers() {
@@ -236,7 +235,12 @@ export function initializeUiHandlers() {
             if (effect) {
                 dom.fieldEffectInfoTitle.textContent = `Efeito Ativo em ${gameState.players[playerId].name}`;
                 dom.fieldEffectInfoName.textContent = effect.name;
-                dom.fieldEffectInfoDescription.textContent = config.POSITIVE_EFFECTS[effect.name] || config.NEGATIVE_EFFECTS[effect.name];
+                let description = config.POSITIVE_EFFECTS[effect.name] || config.NEGATIVE_EFFECTS[effect.name];
+                if (!description && gameState.isXaelChallenge) {
+                    const challengeEffects = { ...config.XAEL_CHALLENGE_EFFECTS.positive, ...config.XAEL_CHALLENGE_EFFECTS.negative };
+                    description = challengeEffects[effect.name];
+                }
+                dom.fieldEffectInfoDescription.textContent = description;
                 dom.fieldEffectInfoModal.classList.remove('hidden');
             }
         } else if (cardElement) {
@@ -245,7 +249,7 @@ export function initializeUiHandlers() {
         }
     });
 
-    dom.playButton.addEventListener('click', () => {
+    dom.playButton.addEventListener('click', async () => {
         const { gameState } = getState();
         const card = gameState.selectedCard;
         if (!card) return;
@@ -255,32 +259,43 @@ export function initializeUiHandlers() {
             return;
         }
 
-        const effectNeedsTarget = ['Mais', 'Menos', 'Sobe', 'Desce', 'Pula', 'Reversus'].includes(card.name);
+        const effectNeedsTarget = ['Mais', 'Menos', 'Sobe', 'Desce', 'Pula', 'Reversus', 'Estrela Subente', 'Estrela Cadente', 'Roubo da Estrela', 'Doando uma Estrela'].includes(card.name);
         if (effectNeedsTarget) {
             dom.targetModal.classList.remove('hidden');
             dom.targetModalCardName.textContent = card.name;
             
             let targetablePlayers = gameState.playerIdsInGame;
-            // The "Pula" card can now target any player, including the caster.
-            if (card.name !== 'Pula') {
-                 // For other cards, remove self from target list unless it's a beneficial card in a team game, etc.
-                 // This logic can be refined, but for now, this is a safe default.
-                 // targetablePlayers = gameState.playerIdsInGame.filter(id => id !== 'player-1');
-            }
-
-
+            
             dom.targetPlayerButtonsEl.innerHTML = targetablePlayers.map(id => {
                 const playerObj = gameState.players[id];
                 const pIdNum = parseInt(id.split('-')[1]);
                 return `<button class="control-button target-player-${pIdNum}" data-target-id="${id}">${playerObj.name}</button>`;
             }).join('');
         } else {
-            game.playCard(gameState.players['player-1'], card, 'player-1');
+            await game.playCard(gameState.players['player-1'], card, 'player-1');
         }
     });
     
     dom.endTurnButton.addEventListener('click', game.advanceToNextPlayer);
-    dom.restartButton.addEventListener('click', ui.showSplashScreen);
+    dom.restartButton.addEventListener('click', () => {
+        const { gameState } = getState();
+        if (gameState && gameState.isXaelChallenge) {
+            // If it was a Xael challenge, restore the pre-challenge state
+            const snapshot = getState().preChallengeGameStateSnapshot;
+            if (snapshot) {
+                updateState('gameState', snapshot);
+                updateState('preChallengeGameStateSnapshot', null);
+                dom.gameOverModal.classList.add('hidden');
+                dom.appContainerEl.classList.remove('hidden');
+                ui.renderAll();
+                game.resumeGameFromSnapshot();
+            } else {
+                ui.showSplashScreen();
+            }
+        } else {
+            ui.showSplashScreen();
+        }
+    });
 
     // --- Modal Handlers ---
     dom.targetPlayerButtonsEl.addEventListener('click', (e) => {
@@ -292,24 +307,24 @@ export function initializeUiHandlers() {
     dom.targetCancelButton.addEventListener('click', () => {
         const { gameState } = getState();
         dom.targetModal.classList.add('hidden');
-        gameState.gamePhase = 'playing';
+        if (gameState) gameState.gamePhase = 'playing';
         updateState('reversusTotalIndividualFlow', false);
         ui.updateTurnIndicator();
     });
     
-    dom.reversusTargetScoreButton.addEventListener('click', () => {
+    dom.reversusTargetScoreButton.addEventListener('click', async () => {
         const { gameState } = getState();
         dom.reversusTargetModal.classList.add('hidden');
         gameState.gamePhase = 'playing';
-        game.playCard(gameState.players['player-1'], gameState.reversusTarget.card, gameState.reversusTarget.targetPlayerId, 'score');
+        await game.playCard(gameState.players['player-1'], gameState.reversusTarget.card, gameState.reversusTarget.targetPlayerId, 'score');
         gameState.reversusTarget = null;
     });
 
-    dom.reversusTargetMovementButton.addEventListener('click', () => {
+    dom.reversusTargetMovementButton.addEventListener('click', async () => {
         const { gameState } = getState();
         dom.reversusTargetModal.classList.add('hidden');
         gameState.gamePhase = 'playing';
-        game.playCard(gameState.players['player-1'], gameState.reversusTarget.card, gameState.reversusTarget.targetPlayerId, 'movement');
+        await game.playCard(gameState.players['player-1'], gameState.reversusTarget.card, gameState.reversusTarget.targetPlayerId, 'movement');
         gameState.reversusTarget = null;
     });
 
@@ -320,10 +335,10 @@ export function initializeUiHandlers() {
     });
 
     // Reversus Total Choice
-    dom.reversusTotalGlobalButton.addEventListener('click', () => {
+    dom.reversusTotalGlobalButton.addEventListener('click', async () => {
         const { gameState } = getState();
         dom.reversusTotalChoiceModal.classList.add('hidden');
-        game.playCard(gameState.players['player-1'], gameState.selectedCard, 'player-1');
+        await game.playCard(gameState.players['player-1'], gameState.selectedCard, 'player-1');
     });
 
     dom.reversusTotalIndividualButton.addEventListener('click', () => {
@@ -346,7 +361,7 @@ export function initializeUiHandlers() {
         ui.renderAll();
     });
 
-    dom.reversusIndividualEffectButtons.addEventListener('click', (e) => {
+    dom.reversusIndividualEffectButtons.addEventListener('click', async (e) => {
         if (e.target.tagName === 'BUTTON') {
             const { gameState } = getState();
             const effectNameToApply = e.target.dataset.effect;
@@ -356,7 +371,7 @@ export function initializeUiHandlers() {
             gameState.gamePhase = 'playing'; // Reset phase before card play
             
             const options = { isIndividualLock: true, effectNameToApply };
-            game.playCard(gameState.players['player-1'], card, targetPlayerId, null, options);
+            await game.playCard(gameState.players['player-1'], card, targetPlayerId, null, options);
             updateState('reversusTotalIndividualFlow', false);
         }
     });
@@ -414,6 +429,7 @@ export function initializeUiHandlers() {
             const room = getState().pvpRooms.find(r => r.id === roomId);
             if (room.password) {
                 updateState('currentEnteringRoomId', roomId);
+                dom.pvpRoomListModal.classList.add('hidden');
                 dom.pvpPasswordModal.classList.remove('hidden');
             } else {
                 dom.pvpRoomListModal.classList.add('hidden');
@@ -452,6 +468,7 @@ export function initializeUiHandlers() {
     dom.pvpPasswordCancel.addEventListener('click', () => {
         dom.pvpPasswordModal.classList.add('hidden');
         dom.pvpPasswordInput.value = '';
+        dom.pvpRoomListModal.classList.remove('hidden');
     });
     
     dom.pvpLobbyCloseButton.addEventListener('click', () => {
@@ -459,7 +476,7 @@ export function initializeUiHandlers() {
         dom.pvpRoomListModal.classList.remove('hidden');
     });
     
-    dom.lobbyStartGameButton.addEventListener('click', () => {
+    dom.lobbyStartGameButton.addEventListener('click', async () => {
         const numPlayersMap = {
             'solo-2p': 2, 'solo-3p': 3, 'solo-4p': 4, 'duo': 4
         };
@@ -468,15 +485,52 @@ export function initializeUiHandlers() {
         const gameMode = mode === 'duo' ? 'duo' : 'solo';
         
         const overrides = {};
+        let isNarradorChallenge = false;
+        let isInversusChallenge = false;
+        let isXaelChallenge = false;
+        
         ['p2', 'p3', 'p4'].forEach(playerPrefix => {
             const selectEl = document.getElementById(`lobby-ai-${playerPrefix}`);
             const playerId = `player-${playerPrefix.slice(1)}`;
-            if (selectEl && selectEl.value !== 'default') {
-                overrides[playerId] = { aiType: selectEl.value, name: selectEl.options[selectEl.selectedIndex].text };
+            if (selectEl && !selectEl.closest('.hidden')) {
+                const aiType = selectEl.value;
+
+                if (aiType === 'narrador') isNarradorChallenge = true;
+                if (aiType === 'inversus') isInversusChallenge = true;
+                if (aiType === 'xael') isXaelChallenge = true;
+
+                if (aiType !== 'default') {
+                    overrides[playerId] = { aiType: aiType, name: selectEl.options[selectEl.selectedIndex].text };
+                }
             }
         });
         
-        game.initializeGame(gameMode, { numPlayers, overrides });
+        if (isNarradorChallenge) {
+            await game.initializeGame('solo', {
+                story: {
+                    battle: 'narrador',
+                    playerIds: ['player-1', 'player-2'],
+                    overrides: { 'player-2': { name: 'Narrador', aiType: 'narrador' } }
+                }
+            });
+        } else if (isInversusChallenge) {
+            await game.initializeGame('inversus', {
+                numPlayers: 2,
+                overrides: {
+                    'player-2': { name: 'Inversus', aiType: 'inversus' }
+                }
+            });
+        } else if (isXaelChallenge) {
+             await game.initializeGame('solo', { 
+                story: { 
+                    battle: 'xael_challenge', 
+                    playerIds: ['player-1', 'player-2'], 
+                    overrides: { 'player-2': { name: 'Xael', aiType: 'xael' } }
+                } 
+            });
+        } else {
+            await game.initializeGame(gameMode, { numPlayers, overrides });
+        }
     });
     
     dom.lobbyGameModeEl.addEventListener('change', () => ui.updateLobbyUi(getState().currentEnteringRoomId));
@@ -522,6 +576,7 @@ export function initializeUiHandlers() {
     
     dom.debugButton.addEventListener('click', () => {
         const { gameState } = getState();
+        if (!gameState) return;
         // Prevent saving in non-story mode or during unsafe game phases
         const isUnsafePhase = gameState.gamePhase !== 'playing' && gameState.gamePhase !== 'paused';
         dom.menuSaveGameButton.disabled = !gameState?.isStoryMode || isUnsafePhase;
@@ -555,6 +610,46 @@ export function initializeUiHandlers() {
     });
     dom.closeAchievementsButton.addEventListener('click', () => dom.achievementsModal.classList.add('hidden'));
 
+    // Xael Challenge Handlers
+    dom.xaelPopup.addEventListener('click', () => {
+        const { gameState } = getState();
+        if (dom.xaelPopup.classList.contains('hidden') || !gameState) return;
+        
+        sound.playSoundEffect('destruido');
+        sound.announceEffect('VOCÊ FOI DESAFIADO!!!', 'reversus-total', 2000);
+        
+        // Save pre-challenge state before creating the new game
+        const snapshot = structuredClone(gameState);
+        updateState('preChallengeGameStateSnapshot', snapshot);
+
+        dom.xaelPopup.classList.add('hidden');
+        
+        // Start the challenge with correct story setup
+        game.initializeGame('solo', { 
+            story: { 
+                battle: 'xael_challenge', 
+                playerIds: ['player-1', 'player-2'], 
+                overrides: { 'player-2': { name: 'Xael', aiType: 'xael' } }
+            } 
+        });
+    });
+
+    dom.xaelStarPowerButton.addEventListener('click', () => {
+        const { gameState } = getState();
+        if (!gameState || !gameState.players['player-1']) return;
+
+        const player = gameState.players['player-1'];
+        if (gameState.currentPlayer === 'player-1' && player.hasXaelStarPower && player.xaelStarPowerCooldown === 0) {
+            updateLog('Você usou o Poder Estelar do Xael!');
+            sound.playSoundEffect('conquista');
+            player.xaelStarPowerCooldown = 4; // Set to 4, will become 3 at end of round
+            gameState.revealedHands = gameState.playerIdsInGame.filter(id => id !== 'player-1');
+            ui.updateXaelStarPowerUI();
+            ui.renderAll();
+        }
+    });
+
+
     // Custom Events
     document.addEventListener('startStoryGame', (e) => {
         game.initializeGame(e.detail.mode, e.detail.options);
@@ -567,7 +662,7 @@ export function initializeUiHandlers() {
         const { gameState, storyState } = getState();
         if(gameState) gameState.gamePhase = 'game_over';
     
-        const hardFailBattles = ['contravox', 'reversum', 'necroverso_king', 'necroverso_final', 'narrador'];
+        const hardFailBattles = ['contravox', 'reversum', 'necroverso_king', 'necroverso_final', 'narrador', 'xael_challenge'];
     
         if (!won && hardFailBattles.includes(battle)) {
             let loseMessage = "Você Perdeu!";
@@ -578,6 +673,10 @@ export function initializeUiHandlers() {
                 else loseMessage = "A escuridão consome tudo...";
             } else if (battle === 'narrador') {
                 loseMessage = "Você foi um bom oponente...";
+            } else if (battle === 'necroverso_king') {
+                loseMessage = "Os Reis provaram ser fortes demais...";
+            } else if (battle === 'xael_challenge') {
+                loseMessage = "Você precisa de mais estrelas para vencer o criador!";
             }
     
             ui.showGameOver(loseMessage, "Você Perdeu!", false);
@@ -640,67 +739,48 @@ export function initializeUiHandlers() {
                  nextNodeId = 'post_reversum_victory';
                  break;
             case 'necroverso_king':
-                const kingPortraits = [
-                    document.querySelector('#player-area-player-2 .player-area-character-portrait'),
-                    document.querySelector('#player-area-player-3 .player-area-character-portrait'),
-                    document.querySelector('#player-area-player-4 .player-area-character-portrait')
-                ].filter(p => p);
-
-                if (kingPortraits.length > 0) {
-                    await Promise.all(kingPortraits.map(p => shatterImage(p)));
-                    await new Promise(res => setTimeout(res, 2000)); // Wait after all shatters
+                if (won) {
+                    ui.showGameOver("Você os derrotou, mas a verdadeira ameaça se revela...", "Vitória Parcial", false);
+                    achievements.grantAchievement('true_end_beta');
+                    nextNodeId = 'post_necroverso_king_victory';
                 }
-                ui.showGameOver("Impossível!", "Você Venceu!", false);
-                achievements.grantAchievement('true_end_beta');
-                nextNodeId = 'post_necroverso_king_victory';
+                // Loss is handled by the hard fail check
                 break;
             case 'necroverso_final':
                 if (won) {
+                    ui.showGameOver("Você salvou o Inversus!", "VITÓRIA FINAL!", false);
                     achievements.grantAchievement('true_end_final');
-                    await story.playEndgameSequence();
+                    setTimeout(story.playEndgameSequence, 2000);
                 }
-                break;
+                return; // Exit here, no nextNodeId logic needed
             case 'narrador':
-                 if (won) {
-                    ui.showGameOver("Parabéns! É... agora não tem mais segredos ;)", "VITÓRIA SECRETA", false);
-                    setTimeout(() => {
+                if (won) {
+                     ui.showGameOver("Impossível... meus cálculos...", "Vitória!", false);
+                     // No achievement for narrator win, it's just a secret fight.
+                     setTimeout(() => {
                         dom.gameOverModal.classList.add('hidden');
                         ui.showSplashScreen();
-                    }, 4000);
-                 }
-                 break;
+                     }, 3000);
+                }
+                return;
+            case 'xael_challenge':
+                if (won) {
+                    ui.showGameOver("Você conseguiu... por agora.", "Desafio Vencido!", false);
+                    setTimeout(() => {
+                        dom.restartButton.click(); // This will restore the pre-challenge snapshot
+                    }, 3000);
+                }
+                return;
         }
     
         if (nextNodeId) {
-            const currentRestartButton = document.getElementById('restart-button');
-    
-            if (currentRestartButton && currentRestartButton.parentNode) {
-                const newContinueButton = currentRestartButton.cloneNode(true); 
-                newContinueButton.textContent = "Continuar";
-                newContinueButton.classList.remove('hidden');
-    
-                const continueHandler = () => {
-                    dom.gameOverModal.classList.add('hidden');
-                    dom.storyModeModalEl.classList.remove('hidden');
-                    
-                    // FIX: Ensure the dialogue scene is visible and ready for the next node.
-                    dom.storyScene1El.classList.add('hidden');
-                    dom.storySceneDialogueEl.classList.remove('hidden');
-                    dom.storySceneDialogueEl.style.opacity = 1;
-
-                    story.renderStoryNode(nextNodeId);
-                };
-    
-                newContinueButton.addEventListener('click', continueHandler, { once: true });
-                currentRestartButton.parentNode.replaceChild(newContinueButton, currentRestartButton);
-            } else {
-                console.error("STORY ERROR: Could not find restart button. Advancing automatically.");
-                setTimeout(() => {
-                    dom.gameOverModal.classList.add('hidden');
-                    dom.storyModeModalEl.classList.remove('hidden');
-                    story.renderStoryNode(nextNodeId);
-                }, 2000);
-            }
+            document.body.dataset.storyContinuation = 'true';
+            setTimeout(() => {
+                dom.gameOverModal.classList.add('hidden');
+                story.renderStoryNode(nextNodeId);
+                dom.storyModeModalEl.classList.remove('hidden');
+                document.body.dataset.storyContinuation = 'false';
+            }, 3000);
         }
     });
 }

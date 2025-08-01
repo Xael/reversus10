@@ -108,6 +108,7 @@ export const storyDialogueTextEl = document.getElementById('story-dialogue-text'
 export const storyDialogueOptionsEl = document.getElementById('story-dialogue-options');
 export const musicPlayer = document.getElementById('music-player');
 export const sfxPlayer = document.getElementById('sfx-player');
+export const popupSfxPlayer = document.getElementById('popup-sfx-player');
 export const muteButton = document.getElementById('mute-button');
 export const volumeSlider = document.getElementById('volume-slider');
 export const fullscreenButton = document.getElementById('fullscreen-button');
@@ -157,3 +158,8 @@ export const rightScoreValue = document.getElementById('right-score-value');
 
 // Secret Battle
 export const splashLogo = document.getElementById('splash-logo');
+
+// Xael Challenge
+export const cosmicGlowOverlay = document.getElementById('cosmic-glow-overlay');
+export const xaelPopup = document.getElementById('xael-popup');
+export const xaelStarPowerButton = document.getElementById('xael-star-power');

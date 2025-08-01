@@ -1,10 +1,17 @@
+
+
+
+
+
+
 import * as dom from './dom.js';
 import * as config from './config.js';
 import { getState, updateState } from './state.js';
-import { updateLiveScoresAndWinningStatus, executeAiTurn } from './game.js';
+import { updateLiveScoresAndWinningStatus } from './game.js';
 import { initializeFloatingItemsAnimation } from './animations.js';
 import { stopStoryMusic, updateMusic, initializeMusic } from './sound.js';
 import { checkForSavedGame } from './save-load.js';
+import * as achievements from './achievements.js';
 
 /**
  * Gets the image URL for a given card.
@@ -37,7 +44,7 @@ export const renderCard = (card, context, playerId) => {
     const { gameState } = getState();
     const isHumanPlayer = playerId === 'player-1';
     const classList = ['card', card.type];
-    const isHidden = context === 'ai-hand' && !gameState.revealedHands.includes(playerId);
+    const isHidden = context === 'ai-hand' && !gameState.revealedHands.includes(playerId) && !(gameState.isXaelChallenge && playerId !== 'player-1');
     
     let isCardDisabled = false;
     if (playerId && context === 'player-hand') {
@@ -110,15 +117,23 @@ export const renderPlayerArea = (player) => {
 
     // Apply classes for styling
     playerEl.className = 'player-area'; // Reset classes
-    playerEl.classList.add(`p${pIdNum}-bg`);
+    if (gameState.isInversusMode && player.aiType === 'inversus') {
+        playerEl.classList.add('inversus-bg');
+    } else if (player.aiType === 'xael') {
+        playerEl.classList.add('xael-portrait-bg');
+    } else if (player.aiType === 'necroverso_tutorial') {
+        playerEl.classList.add('player-area-necro-tutorial');
+    } else if (player.aiType === 'necroverso_final') {
+        playerEl.classList.add('player-area-necro-final');
+    }
+    else {
+        playerEl.classList.add(`p${pIdNum}-bg`);
+    }
 
     if (player.aiType === 'contravox') playerEl.classList.add('contravox-glow');
     if (player.aiType === 'versatrix') playerEl.classList.add('versatrix-glow');
     if (player.aiType === 'reversum') playerEl.classList.add('reversum-glow');
 
-    if (player.aiType === 'necroverso_tutorial') playerEl.classList.add('player-area-necro-tutorial');
-    else if (player.aiType === 'necroverso_final') playerEl.classList.add('player-area-necro-final');
-    
     if(player.isEliminated) playerEl.classList.add('eliminated');
 
     const isRevealed = gameState.revealedHands.includes(player.id);
@@ -128,25 +143,31 @@ export const renderPlayerArea = (player) => {
     let heartsHTML = '';
     let playerNameClass = `player-name player-1`; // Default
     let portraitHTML = '';
+    let starCounterHTML = '';
 
-    const storyBossPortraits = {
-        'necroverso_tutorial': 'necroverso.png',
-        'contravox': 'contravox.png',
-        'versatrix': 'versatrix.png',
-        'reversum': 'reversum.png'
+    // Consolidated portrait logic
+    const specialPortraits = {
+        'necroverso_tutorial': { src: 'necroverso.png', class: '' },
+        'contravox': { src: 'contravox.png', class: 'contravox-portrait' },
+        'versatrix': { src: 'versatrix.png', class: '' },
+        'reversum': { src: 'reversum.png', class: '' },
+        'narrador': { src: 'narrador.png', class: 'effect-glitch' },
+        'xael': { src: 'xaeldesafio.png', class: 'xael-glow' },
     };
 
     if (gameState.isInversusMode && player.aiType === 'inversus') {
         portraitHTML = `<img src="inversum1.png" id="inversus-character-portrait" class="inversus-character-portrait" alt="Inversus portrait">`;
-    } else if (storyBossPortraits[player.aiType]) {
+    } else if (specialPortraits[player.aiType]) {
+        const portraitInfo = specialPortraits[player.aiType];
         // Prevent showing the Versatrix portrait for player 1 if they somehow get it
         if (!(player.aiType === 'versatrix' && player.id === 'player-1')) {
-            const portraitSrc = storyBossPortraits[player.aiType];
-            portraitHTML = `<img src="${portraitSrc}" class="player-area-character-portrait" alt="${player.name} portrait">`;
+            portraitHTML = `<img src="${portraitInfo.src}" class="player-area-character-portrait ${portraitInfo.class}" alt="${player.name} portrait">`;
         }
     }
 
-    if (player.name === 'Rei Necroverso') {
+    if (gameState.isInversusMode && player.aiType === 'inversus') {
+        playerNameClass = 'player-name player-2 inversus-name-glow';
+    } else if (player.name === 'Rei Necroverso') {
         if (player.aiType === 'reversum') playerNameClass = 'player-name player-2';
         else if (player.aiType === 'contravox') playerNameClass = 'player-name player-3';
         else if (player.aiType === 'versatrix') playerNameClass = 'player-name player-4';
@@ -155,6 +176,8 @@ export const renderPlayerArea = (player) => {
         if(player.aiType === 'necroverso_final') {
              playerNameClass += ' final-boss-glow';
         }
+    } else if (player.aiType === 'xael') {
+        playerNameClass = 'player-name xael';
     } else {
         playerNameClass = `player-name player-${pIdNum}`;
     }
@@ -176,8 +199,12 @@ export const renderPlayerArea = (player) => {
         const heartsText = heartIcon.repeat(player.hearts || 0);
         heartsHTML = `<div class="inversus-hearts-container" title="Corações">${heartsText}</div>`;
     }
+
+    if (gameState.isXaelChallenge) {
+        starCounterHTML = `<div class="player-star-counter" title="Estrelas">⭐ ${player.stars || 0}</div>`;
+    }
     
-    const positionLabel = gameState.isInversusMode ? 'Vitórias' : 'Casa';
+    const positionLabel = (gameState.isInversusMode || gameState.isXaelChallenge) ? 'Vitórias' : 'Casa';
     const positionValue = player.position;
     const effectsHTML = effectsList.length > 0 ? effectsList.map(e => `<span>${e}</span>`).join(' ') : 'Nenhum';
     
@@ -187,7 +214,7 @@ export const renderPlayerArea = (player) => {
     const statsHTML = `
         <div class="player-stats">
             <span class="stat-item">Pontos: <strong>${scoreDisplay}</strong></span>
-            ${!gameState.isInversusMode ? `<span class="stat-item">${positionLabel}: <strong>${positionValue}</strong></span>` : ''}
+            ${!(gameState.isInversusMode || gameState.isXaelChallenge) ? `<span class="stat-item">${positionLabel}: <strong>${positionValue}</strong></span>` : ''}
             <span class="stat-item">Resto: <strong>${player.resto ? player.resto.name : 'N/A'}</strong></span>
             <span class="stat-item">Efeitos: <strong>${effectsHTML}</strong></span>
         </div>
@@ -203,6 +230,7 @@ export const renderPlayerArea = (player) => {
                 <div class="player-name-container">
                     <span class="${playerNameClass}">${player.name}</span>
                     ${heartsHTML}
+                    ${starCounterHTML}
                     ${isRevealed ? '<div class="revealed-icon" title="Mão revelada"></div>' : ''}
                     ${fieldEffectIndicatorHTML}
                 </div>
@@ -212,7 +240,7 @@ export const renderPlayerArea = (player) => {
         </div>
     `;
     
-    const handContext = player.isHuman || isRevealed ? 'player-hand' : 'ai-hand';
+    const handContext = (player.isHuman || isRevealed || (gameState.isXaelChallenge && !player.isHuman)) ? 'player-hand' : 'ai-hand';
     
     const sortedHand = [...player.hand].sort((a, b) => {
         if (a.type === b.type) return 0;
@@ -227,7 +255,7 @@ export const renderPlayerArea = (player) => {
     
     const valueCard1 = player.playedCards.value[0];
     const valueCard2 = player.playedCards.value[1];
-    const scoreEffectCard = player.playedCards.effect.find(c => ['Mais', 'Menos', 'NECRO X', 'NECRO X Invertido', 'Carta da Versatrix'].includes(c.name) || (c.name === 'Reversus' && c.reversedEffectType === 'score') || (c.name === 'Reversus Total' && c.reversedEffectType === 'score'));
+    const scoreEffectCard = player.playedCards.effect.find(c => ['Mais', 'Menos', 'NECRO X', 'NECRO X Invertido', 'Carta da Versatrix', 'Estrela Subente'].includes(c.name) || (c.name === 'Reversus' && c.reversedEffectType === 'score') || (c.name === 'Reversus Total' && c.reversedEffectType === 'score'));
     const moveEffectCard = player.playedCards.effect.find(c => ['Sobe', 'Desce', 'Pula'].includes(c.name) || (c.name === 'Reversus' && c.reversedEffectType === 'movement') || (c.name === 'Reversus Total' && c.reversedEffectType === 'movement'));
     const reversusTotalCard = player.playedCards.effect.find(c => c.name === 'Reversus Total' && !c.reversedEffectType && !c.isLocked);
 
@@ -266,6 +294,7 @@ const renderAllPlayerAreas = () => {
  */
 export const renderBoard = () => {
     const { gameState } = getState();
+    if (!gameState) return;
     dom.boardEl.innerHTML = '';
     const playerIds = gameState.playerIdsInGame;
 
@@ -279,7 +308,12 @@ export const renderBoard = () => {
             const classList = ['board-space', `space-${space.color}`];
             if (space.isUsed) classList.push('used');
             spaceEl.className = classList.join(' ');
-            spaceEl.textContent = space.id.toString();
+            
+            if (space.color === 'star') {
+                spaceEl.innerHTML = '<span class="star-icon">⭐</span>';
+            } else {
+                 spaceEl.textContent = space.id.toString();
+            }
 
             const pawnContainer = document.createElement('div');
             pawnContainer.className = 'pawn-container';
@@ -294,7 +328,7 @@ export const renderBoard = () => {
     }
 
     // Render pawns in the center (position 10)
-    if (!gameState.isFinalBoss) {
+    if (!gameState.isFinalBoss && !gameState.isXaelChallenge) {
         const centerPawnsContainer = document.createElement('div');
         centerPawnsContainer.className = 'board-center-pawns';
         const pawnsInCenter = playerIds
@@ -306,6 +340,8 @@ export const renderBoard = () => {
             const pawnClassList = ['pawn'];
             if (player.aiType && player.aiType.includes('necroverso')) {
                 pawnClassList.push('necro');
+            } else if (player.aiType === 'xael') {
+                pawnClassList.push('xael');
             } else {
                 const pIdNum = parseInt(player.id.split('-')[1]);
                 pawnClassList.push(`player-${pIdNum}`);
@@ -336,6 +372,8 @@ export const renderBoard = () => {
                 const pawnClassList = ['pawn'];
                  if (player.aiType && player.aiType.includes('necroverso')) {
                     pawnClassList.push('necro');
+                } else if (player.aiType === 'xael') {
+                    pawnClassList.push('xael');
                 } else {
                     const pIdNum = parseInt(player.id.split('-')[1]);
                     pawnClassList.push(`player-${pIdNum}`);
@@ -441,9 +479,14 @@ export const showRoundSummaryModal = (winners, scores) => {
             const player = gameState.players[id];
             const isWinner = winners.includes(id);
             const pIdNum = parseInt(id.split('-')[1]);
+            let playerNameClasses = `summary-player-name player-name player-${pIdNum}`;
+            if (player.aiType === 'xael') {
+                playerNameClasses = `summary-player-name player-name xael`;
+            }
+
             return `
                 <div class="summary-player-score ${isWinner ? 'is-winner' : ''}">
-                    <span class="summary-player-name player-name player-${pIdNum}">${player.name}</span>
+                    <span class="${playerNameClasses}">${player.name}</span>
                     <span class="summary-player-final-score">${scores[id]}</span>
                 </div>
             `;
@@ -472,12 +515,17 @@ export const showGameOver = (message, title = "Fim de Jogo!", showRestart = true
     if (gameState?.isStoryMode && document.body.dataset.storyContinuation === 'true') {
         return;
     }
+    
+    if (gameState?.isXaelChallenge) {
+        dom.cosmicGlowOverlay.classList.add('hidden');
+    }
 
     dom.gameOverTitle.textContent = title;
     dom.gameOverMessage.textContent = message;
     dom.restartButton.classList.toggle('hidden', !showRestart);
     dom.gameOverModal.classList.remove('hidden');
     dom.debugButton.classList.add('hidden');
+    dom.xaelStarPowerButton.classList.add('hidden');
 };
 
 /**
@@ -501,6 +549,7 @@ export const showSplashScreen = () => {
 
     dom.appContainerEl.classList.add('hidden');
     dom.debugButton.classList.add('hidden');
+    dom.xaelStarPowerButton.classList.add('hidden');
     dom.gameOverModal.classList.add('hidden');
     dom.gameSetupModal.classList.add('hidden');
     dom.rulesModal.classList.add('hidden');
@@ -513,6 +562,7 @@ export const showSplashScreen = () => {
     dom.gameMenuModal.classList.add('hidden');
     if (dom.leftScoreBox) dom.leftScoreBox.classList.add('hidden');
     if (dom.rightScoreBox) dom.rightScoreBox.classList.add('hidden');
+    dom.cosmicGlowOverlay.classList.add('hidden');
 
     initializeFloatingItemsAnimation(dom.splashAnimationContainerEl);
     dom.splashScreenEl.classList.remove('hidden');
@@ -529,7 +579,6 @@ export const showSplashScreen = () => {
 
     checkForSavedGame();
     // Re-check for special features now that we're on the splash screen
-    const achievements = require('./achievements.js');
     achievements.checkAndShowSpecialFeatures();
 };
 
@@ -546,6 +595,7 @@ export const renderAll = () => {
     updateLiveScoresAndWinningStatus();
     renderAllPlayerAreas();
     updateTurnIndicator();
+    updateXaelStarPowerUI();
 
     const playButton = dom.playButton;
     if (playButton) {
@@ -629,11 +679,9 @@ export const updateLobbyUi = (roomId) => {
         const selectEl = document.getElementById(selectId);
         if (selectEl) {
             for (const option of selectEl.options) {
-                // Only disable special characters, not the 'default' option
-                if (option.value !== 'default') {
-                    // Disable if it's NOT the special room.
+                const isSpecialAI = ['contravox', 'versatrix', 'reversum', 'necroverso', 'necroverso_final', 'xael', 'narrador', 'inversus'].includes(option.value);
+                if (isSpecialAI) {
                     option.disabled = !isSpecialRoom;
-                    // If it's not the special room and a special AI is selected, reset to default.
                     if (!isSpecialRoom && selectEl.value === option.value) {
                         selectEl.value = 'default';
                     }
@@ -667,3 +715,20 @@ export function showAchievementNotification(achievement, customText = '') {
 
     toast.classList.add('show');
 }
+
+export const updateXaelStarPowerUI = () => {
+    const { gameState } = getState();
+    if (!gameState || !dom.xaelStarPowerButton) return;
+    
+    const player = gameState.players['player-1'];
+    
+    if (player && player.hasXaelStarPower) {
+        dom.xaelStarPowerButton.classList.remove('hidden');
+        const isReady = player.xaelStarPowerCooldown === 0;
+        dom.xaelStarPowerButton.classList.toggle('cooldown', !isReady);
+        dom.xaelStarPowerButton.disabled = !isReady;
+        dom.xaelStarPowerButton.title = isReady ? 'Poder Estelar do Xael (Revela mãos)' : `Poder Estelar (Recarregando: ${player.xaelStarPowerCooldown} rodadas)`;
+    } else {
+        dom.xaelStarPowerButton.classList.add('hidden');
+    }
+};

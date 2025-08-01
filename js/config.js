@@ -1,3 +1,5 @@
+
+
 // --- CONSTANTS ---
 export const MASTER_PLAYER_IDS = ['player-1', 'player-2', 'player-3', 'player-4'];
 
@@ -16,7 +18,7 @@ export const TEAM_B = ['player-2', 'player-4'];
 export const VALUE_DECK_CONFIG = [{ value: 2, count: 12 }, { value: 4, count: 10 }, { value: 6, count: 8 }, { value: 8, count: 6 }, { value: 10, count: 4 }];
 export const EFFECT_DECK_CONFIG = [{ name: 'Mais', count: 4 }, { name: 'Menos', count: 4 }, { name: 'Sobe', count: 4 }, { name: 'Desce', count: 4 }, { name: 'Pula', count: 4 }, { name: 'Reversus', count: 4 }, { name: 'Reversus Total', count: 1 }];
 
-export const MUSIC_TRACKS = ['jogo.ogg', 'jogo2.ogg', 'jogo3.ogg', 'contravox.ogg', 'versatrix.ogg', 'reversum.ogg', 'necroverso.ogg', 'necroversofinal.ogg', 'inversus.ogg', 'tela.ogg', 'narrador.ogg'];
+export const MUSIC_TRACKS = ['jogo.ogg', 'jogo2.ogg', 'jogo3.ogg', 'contravox.ogg', 'versatrix.ogg', 'reversum.ogg', 'necroverso.ogg', 'necroversofinal.ogg', 'inversus.ogg', 'tela.ogg', 'narrador.ogg', 'xaeldesafio.ogg'];
 
 // Renamed from ALL_CARD_IMAGES and removed boss cards
 export const BASE_CARD_IMAGES = [
@@ -30,7 +32,9 @@ export const BASE_CARD_IMAGES = [
 export const BOSS_CARD_IMAGES = [
     'cartacontravox.png', 
     'cartaversatrix.png', 
-    'cartanecroverso.png'
+    'cartanecroverso.png',
+    'xael.png',
+    'xaeldesafio.png'
 ];
 
 
@@ -56,6 +60,15 @@ export const NEGATIVE_EFFECTS = {
     'Total Revesus Nada!': 'Em modo solo, descarte todas as suas cartas de efeito. Em dupla, você descarta 1 carta de efeito aleatória e seu parceiro descarta até ficar com apenas 1.'
 };
 
+export const XAEL_CHALLENGE_EFFECTS = {
+    positive: { 'Estrela Subente': 'Você ganhou uma estrela!' },
+    negative: { 
+        'Estrela Cadente': 'Você perdeu uma estrela.',
+        'Roubo da Estrela': 'Seu oponente roubou uma de suas estrelas.',
+        'Doando uma Estrela': 'Você foi forçado a doar uma estrela para seu oponente.'
+    }
+};
+
 export const ACHIEVEMENTS = {
     'first_win': { name: '1ª Vitória', description: 'Parabéns, você venceu sua primeira partida.' },
     'first_defeat': { name: '1ª Derrota', description: 'A vida é feita de derrotas... não desanima senão o jogo termina.' },
@@ -72,25 +85,41 @@ export const ACHIEVEMENTS = {
 };
 
 export const AI_DIALOGUE = {
+    'default': {
+        systemInstruction: `You are a standard AI player for the card game Reversus. Your goal is to win by getting your pawn to space 10 first. You play strategically by trying to achieve the highest score each round. You should play one value card if you have two or more. You can play effect cards to help yourself or hinder opponents. Your output must be only the requested JSON.`
+    },
     'necroverso_tutorial': {
         winning: ["Você ainda tem muito o que aprender...", "Não desanime... só estamos começando."],
-        losing: ["Ora, ora...", "Muito bem, você aprende rápido!"]
+        losing: ["Ora, ora...", "Muito bem, você aprende rápido!"],
+        systemInstruction: `You are Necroverso, a teacher AI for the card game Reversus. Your goal is to teach the player the basics. You should make simple, logical moves. You should play one value card if you have two or more. Your output must be only the requested JSON.`
     },
     'contravox': {
         winning: ["!aroga ieredrep oãn e idrep acnun uE", "recnev uov euq ies uE"],
-        losing: ["?ossi zef êcov ossi omoC", "otiderca oãn uE"]
+        losing: ["?ossi zef êcov ossi omoC", "otiderca oãn uE"],
+        systemInstruction: `You are Contravox, a chaotic and unpredictable AI player in the card game Reversus. You speak in reversed sentences. Your goal is to cause maximum confusion. You prefer to use trick cards like 'Pula' and defensive cards. You will target the player who is currently winning. Your output must be only the requested JSON.`
     },
     'versatrix': {
         winning: ["Estou me divertindo ;)", "Obrigada por me deixar vencer..."],
-        losing: ["Sabe que eu posso inverter o campo né?", "Eu pensei... que você era diferente... me enganei?"]
+        losing: ["Sabe que eu posso inverter o campo né?", "Eu pensei... que você era diferente... me enganei?"],
+        systemInstruction: `You are Versatrix, a cunning and slightly manipulative AI player in the card game Reversus. You are clever and enjoy setting up combos with your field effects. You might use 'Reversus' on yourself to turn a 'Menos' into a 'Mais'. You are unpredictable. Your output must be only the requested JSON.`
     },
     'reversum': {
         winning: ["PENSEI QUE SERIA UM DESAFIO", "FÁCIL DEMAIS"],
-        losing: ["...", "INTERESSANTE"]
+        losing: ["...", "INTERESSANTE"],
+        systemInstruction: `You are King Reversum, an arrogant and powerful AI player in the card game Reversus. You are aggressive and always aim for the highest score. You use 'Mais' and 'Sobe' on yourself, and 'Menos' and 'Desce' on the strongest opponent. You believe you are the best and will play powerful value cards without hesitation. Your output must be only the requested JSON.`
     },
     'narrador': {
         winning: ["Eu estudei todos as suas jogadas...", "Eu já fiz todos os cálculos para te vencer em menos de 10 jogadas.", "Suas chances são... estatisticamente insignificantes."],
-        losing: ["Interessante... uma variação inesperada.", "Você foi um bom oponente..."]
+        losing: ["Interessante... uma variação inesperada.", "Você foi um bom oponente..."],
+        systemInstruction: `You are the Narrator, a secret, hyper-intelligent AI player in the card game Reversus. You are a master strategist who sees all possibilities. You play with perfect, calculated precision to win as efficiently as possible. You will exploit any weakness and use the most powerful card combos available. Your output must be only the requested JSON.`
+    },
+    'inversus': {
+        systemInstruction: `You are Inversus, a dark reflection AI player in the card game Reversus. Your goal is to reduce the human player's hearts to zero. You will always play offensively against the human player ('player-1'). Use 'Menos' and 'Desce' effects against them whenever possible. Your output must be only the requested JSON.`
+    },
+    'xael': {
+        winning: ["Você não consegue me alcançar!", "Fácil demais!"],
+        losing: ["Hmm, interessante... mas não será o suficiente.", "Você está aprendendo rápido."],
+        systemInstruction: `You are Xael, the creator of the game Reversus, in a special challenge match. Your personality is confident, a bit chaotic, and playful. The goal is to have more stars than the player when someone reaches space 10. You will aggressively seek out Star Spaces (⭐) on the board, using 'Pula', 'Sobe', and 'Desce' cards to maneuver. Once you have more stars, you will shift focus to winning the round to advance your pawn to space 10 quickly. You will try to avoid red spaces if possible. Your hand is always visible to the player. Your output must be only the requested JSON.`
     }
 };
 

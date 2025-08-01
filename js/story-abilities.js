@@ -1,3 +1,6 @@
+
+
+
 import { getState, updateState } from './state.js';
 import * as config from './config.js';
 import * as dom from './dom.js';
@@ -183,6 +186,17 @@ export async function triggerFieldEffects() {
         
         if (!space || space.isUsed) continue;
 
+        // Handle star spaces for Xael challenge
+        if (space.color === 'star') {
+            space.isUsed = true;
+            player.stars++;
+            updateLog(`${player.name} pousou em uma Casa Estrela e ganhou uma estrela!`);
+            playSoundEffect('conquista');
+            renderAll();
+            continue; // Star spaces don't have other effects
+        }
+
+
         // Handle space effects
         if (space.color === 'red' || space.color === 'blue' || space.color === 'yellow' || space.color === 'black') {
             
@@ -240,33 +254,49 @@ export async function triggerFieldEffects() {
                 continue;
             }
             
-            // Black Hole (Necroverso Final)
+            // Black Hole (Necroverso Final / King)
             if (space.color === 'black') {
-                updateLog(`${player.name} caiu em um Buraco Negro!`);
-                announceEffect("Buraco Negro!", "negative", 2500);
-                await new Promise(res => setTimeout(res, 2500));
-                space.color = 'white'; // Neutralize space visually
-                if (player.isHuman) {
-                    document.dispatchEvent(new CustomEvent('storyWinLoss', { detail: { battle: 'necroverso_final', won: false, reason: 'black_hole' }}));
-                    return; // End processing
-                }
-                if (player.aiType === 'versatrix') {
+                if (gameState.currentStoryBattle === 'necroverso_king' || gameState.currentStoryBattle === 'necroverso_final') {
+                    updateLog(`${player.name} caiu em um Buraco Negro!`);
+                    announceEffect("Buraco Negro!", "negative", 2500);
+                    await new Promise(res => setTimeout(res, 2500));
+                    space.color = 'white'; // Neutralize space visually
+
+                    if (player.isHuman) {
+                        document.dispatchEvent(new CustomEvent('storyWinLoss', { detail: { battle: gameState.currentStoryBattle, won: false, reason: 'black_hole' } }));
+                        return; // End processing
+                    }
+                    
                     player.isEliminated = true;
-                    gameState.versatrixPowerDisabled = true;
-                    updateLog("Versatrix foi eliminada pelo Buraco Negro! Seus poderes se foram.");
-                    // Neutralize all yellow spaces on the board
-                    gameState.boardPaths.forEach(path => {
-                        path.spaces.forEach(space => {
-                            if (space.color === 'yellow') {
-                                space.color = 'white';
-                                space.effectName = null;
-                            }
+                    updateLog(`${player.name} foi eliminado pelo Buraco Negro!`);
+                    
+                    if (player.aiType === 'versatrix') {
+                        gameState.versatrixPowerDisabled = true;
+                        updateLog("Os poderes de Versatrix se foram! Suas casas especiais foram neutralizadas.");
+                        // Neutralize all yellow spaces
+                        gameState.boardPaths.forEach(path => {
+                            path.spaces.forEach(s => {
+                                if (s.color === 'yellow') {
+                                    s.color = 'white';
+                                    s.effectName = null;
+                                }
+                            });
                         });
-                    });
-                    renderBoard();
-                }
-                if (player.aiType === 'necroverso_final') {
-                    updateLog("Necroverso é imune ao Buraco Negro!");
+                    }
+                    
+                    renderAll(); // Re-render to show elimination
+
+                    // Check for win condition in king battle
+                    if (gameState.currentStoryBattle === 'necroverso_king') {
+                        const kings = [gameState.players['player-2'], gameState.players['player-3'], gameState.players['player-4']];
+                        if (kings.every(k => k && k.isEliminated)) {
+                            document.dispatchEvent(new CustomEvent('storyWinLoss', { detail: { battle: 'necroverso_king', won: true } }));
+                            return; // End processing
+                        }
+                    }
+                } else {
+                    // This logic handles black holes if they somehow appear in other modes. Safe fallback.
+                    space.isUsed = true;
                 }
                 continue; // Move to next player after handling black hole
             }
