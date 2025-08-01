@@ -47,7 +47,8 @@ export const updateLog = (logEntry) => {
     
     dom.logEl.innerHTML = gameState.log.map(m => {
         if (m.type === 'dialogue' && m.speaker) {
-            return `<div class="log-message dialogue speaker-${m.speaker}">${m.message}</div>`;
+            const speakerClass = `speaker-${m.speaker}`;
+            return `<div class="log-message dialogue ${speakerClass}">${m.message}</div>`;
         }
         return `<div class="log-message system">${m.message}</div>`;
     }).join('');

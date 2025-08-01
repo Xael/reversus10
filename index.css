@@ -364,6 +364,7 @@ body {
     -moz-osx-font-smoothing: grayscale;
     overflow: hidden;
     height: 100vh;
+    width: 100vw;
 }
 body.screen-shaking {
     animation: screen-shake 0.4s cubic-bezier(.36,.07,.19,.97) both;
@@ -372,22 +373,22 @@ body.screen-shaking {
 .hidden { display: none !important; }
 
 #scalable-container {
-    width: 100vw;
-    height: 100vh;
-    transform: scale(0.98);
+    width: 100%;
+    height: 100%;
     transition: transform 0.5s ease-in-out;
+    overflow: hidden; /* Evita barras de rolagem no container principal */
 }
 
 /* INVERSUS TOTAL SCREEN FLIP */
 #scalable-container.inversus-total-active {
-    transform: rotate(180deg) scale(0.98);
+    transform: rotate(180deg);
 }
 
 /* --- NEW APP LAYOUT --- */
 .app-container {
     display: grid;
-    grid-template-columns: 240px 1fr 450px; /* Left panel shrink, right panel grow */
-    height: 100vh;
+    grid-template-columns: minmax(200px, 240px) 1fr minmax(350px, 450px);
+    height: 100%;
     gap: 1rem;
     padding: 1rem;
     background: none;
@@ -422,6 +423,11 @@ body.screen-shaking {
     overflow: hidden;
     border: 1px solid rgba(168, 218, 220, 0.2);
 }
+
+.left-panel, .right-panel {
+    overflow-y: auto; /* Permite rolagem se o conteúdo for maior */
+}
+
 
 /* --- LEFT PANEL --- */
 .left-panel {
@@ -476,10 +482,40 @@ body.screen-shaking {
     line-height: 1.5;
 }
 
+.chat-input-area {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    flex-shrink: 0;
+}
+
+#chat-input {
+    flex-grow: 1;
+    padding: 8px;
+    border-radius: 5px;
+    border: 1px solid var(--text-secondary);
+    background: var(--bg-main);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+
+#chat-send-button {
+    padding: 8px 12px;
+    font-size: 0.8rem;
+    flex-shrink: 0;
+    text-transform: uppercase;
+    letter-spacing: 0;
+}
+
 .log-message.dialogue {
     font-size: 1.1rem;
     font-weight: bold;
     padding: 0.2rem 0;
+}
+.log-message.speaker-player-1 {
+    color: var(--accent-blue);
+    text-shadow: 0 0 3px var(--accent-blue);
+    font-style: italic;
 }
 .log-message.speaker-contravox { color: var(--accent-green); text-shadow: 0 0 3px var(--accent-green);}
 .log-message.speaker-versatrix { color: var(--accent-yellow); text-shadow: 0 0 3px var(--accent-yellow);}
@@ -504,6 +540,7 @@ body.screen-shaking {
     backdrop-filter: none;
     gap: 0.5rem;
     position: relative;
+    min-height: 0; /* Fix for flexbox in grid */
 }
 .center-panel-header {
     width: 100%;
@@ -593,6 +630,7 @@ body.screen-shaking {
     border: 1px solid rgba(168, 218, 220, 0.2);
     border-radius: 15px;
     padding: 1rem;
+    overflow-y: auto; /* Allow this specific container to scroll if needed */
 }
 
 
@@ -668,8 +706,8 @@ body.screen-shaking {
 .game-board {
     transform: none;
     flex-shrink: 0;
-    width: 550px;
-    height: 550px;
+    width: min(550px, 90vw); /* Responsive width */
+    aspect-ratio: 1 / 1; /* Maintain square shape */
     flex-basis: auto;
     position: relative;
     display: flex;
@@ -808,7 +846,7 @@ body.screen-shaking {
     gap: 0.5rem;
     border: 3px solid transparent;
     transition: all 0.3s ease;
-    overflow: hidden; /* Changed from overflow-y: hidden */
+    overflow-y: auto;
     color: #212121;
     position: relative;
 }
@@ -880,6 +918,7 @@ body.screen-shaking {
     gap: 0.3rem;
     position: relative;
     z-index: 2; /* Ensure header is above portrait */
+    flex-shrink: 0; /* Prevent header from shrinking */
 }
 .player-area.xael-portrait-bg .player-header,
 .player-area-necro-final .player-header,
@@ -1059,6 +1098,8 @@ body.screen-shaking {
 
 #player-1-area-container .player-hand {
     justify-content: center; /* Center the larger cards */
+    min-height: 145px; /* Guarantee space for one row of tall cards */
+    flex-shrink: 0; /* Prevent vertical shrinking */
 }
 #player-1-area-container .player-hand .card {
     width: 91px; /* ~30% bigger */
@@ -1068,6 +1109,7 @@ body.screen-shaking {
     grid-auto-rows: 130px; /* Make row height match hand cards */
     min-height: auto; /* Remove old min-height */
     padding: 10px;
+    flex-shrink: 0; /* Prevent vertical shrinking */
 }
 #player-1-area-container .play-zone-slot {
     min-height: 130px; /* Ensure slot has height even when empty */
@@ -1127,6 +1169,10 @@ body.screen-shaking {
 }
 .player-area-character-portrait.contravox-portrait {
     transform: translateX(-50%) scale(1.1);
+}
+.player-area-character-portrait.versatrix-portrait,
+.player-area-character-portrait.reversum-portrait {
+    transform: translateX(-50%) scale(1.65);
 }
 
 .player-area-character-portrait.effect-glitch {
@@ -1680,8 +1726,8 @@ body.screen-shaking {
     position: fixed;
     bottom: 20px;
     right: 20px;
-    width: 120px;
-    height: 120px;
+    width: 173px;
+    height: 173px;
     cursor: pointer;
     z-index: 2100;
     transform: translateX(150%);

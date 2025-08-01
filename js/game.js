@@ -12,15 +12,44 @@ import { animateCardPlay, showInversusVictoryAnimation, toggleReversusTotalBackg
 import { getGeminiAiMove } from './gemini-ai.js';
 
 /**
+ * Handles dealing a card from a specified deck, reshuffling from the discard pile if empty.
+ * @param {('value'|'effect')} deckType - The type of deck to draw from.
+ * @returns {object | null} The card object, or null if no cards are available.
+ */
+function dealCard(deckType) {
+    const { gameState } = getState();
+    if (gameState.decks[deckType].length === 0) {
+        updateLog(`Reabastecendo o baralho de ${deckType === 'value' ? 'valor' : 'efeito'}...`);
+        if (gameState.discardPiles[deckType].length === 0) {
+            // This is a safety net. In theory, should not be reached if discard piles work.
+            const configDeck = deckType === 'value' ? config.VALUE_DECK_CONFIG : config.EFFECT_DECK_CONFIG;
+            gameState.decks[deckType] = shuffle(createDeck(configDeck, deckType));
+            updateLog(`O baralho de ${deckType} e o descarte estavam vazios. Um novo baralho foi criado.`);
+            if (gameState.decks[deckType].length === 0) {
+                 console.error(`Falha catastrófica ao recriar o baralho de ${deckType}`);
+                 return null;
+            }
+        } else {
+            gameState.decks[deckType] = shuffle([...gameState.discardPiles[deckType]]);
+            gameState.discardPiles[deckType] = [];
+        }
+    }
+    return gameState.decks[deckType].pop();
+}
+
+
+/**
  * Updates the in-game timer display, handling normal and countdown modes.
  */
 export const updateGameTimer = () => {
     const { gameStartTime, gameState, gameTimerInterval } = getState();
     if (!gameStartTime || !gameState) return;
+    
+    const elapsed = Math.floor((Date.now() - gameStartTime) / 1000);
+    gameState.elapsedSeconds = elapsed; // Persist elapsed time for snapshots
 
     if (gameState.currentStoryBattle === 'necroverso_final') {
         const totalSeconds = 20 * 60; // 20 minutes countdown
-        const elapsed = Math.floor((Date.now() - gameStartTime) / 1000);
         const remaining = totalSeconds - elapsed;
         
         if (remaining <= 0) {
@@ -39,7 +68,6 @@ export const updateGameTimer = () => {
         const seconds = (remaining % 60).toString().padStart(2, '0');
         dom.gameTimerContainerEl.textContent = `${minutes}:${seconds}`;
     } else {
-        const elapsed = Math.floor((Date.now() - gameStartTime) / 1000);
         const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
         const seconds = (elapsed % 60).toString().padStart(2, '0');
         dom.gameTimerContainerEl.textContent = `${minutes}:${seconds}`;
@@ -205,7 +233,12 @@ export const initializeGame = async (mode, options) => {
     } else if (options.story) {
         isStoryMode = true;
         storyBattle = options.story.battle;
-        playerIdsInGame = options.story.playerIds;
+        if (options.story.playerIds) {
+            playerIdsInGame = options.story.playerIds;
+        } else {
+            // Fallback for lobby-initiated story battles that respect lobby player count
+            playerIdsInGame = config.MASTER_PLAYER_IDS.slice(0, options.numPlayers);
+        }
         numPlayers = playerIdsInGame.length;
         storyBattleType = options.story.type || null;
         isFinalBoss = storyBattle === 'necroverso_final' || storyBattle === 'necroverso_king';
@@ -322,6 +355,7 @@ export const initializeGame = async (mode, options) => {
         players,
         playerIdsInGame,
         decks: { value: valueDeck, effect: effectDeck },
+        discardPiles: { value: [], effect: [] },
         boardPaths,
         gamePhase: 'setup',
         gameMode: mode,
@@ -354,6 +388,7 @@ export const initializeGame = async (mode, options) => {
         dialogueState: { spokenLines: new Set() }, // Initialize dialogue state
         player1CardsObscured: false, // For Contravox ability
         xaelChallengeOffered: false, // For secret Xael challenge
+        elapsedSeconds: 0,
     };
     
     if (isFinalBoss) {
@@ -431,16 +466,16 @@ export async function initiateGameStartSequence() {
 
 async function drawToStart() {
     const { gameState } = getState();
-    if (gameState.decks.value.length < gameState.playerIdsInGame.length) {
-        updateLog("Reabastecendo o baralho de valor.");
-        gameState.decks.value.push(...shuffle(createDeck(config.VALUE_DECK_CONFIG, 'value')));
-    }
 
     const drawnCards = {};
     const cardPromises = [];
 
     gameState.playerIdsInGame.forEach((id, index) => {
-        const card = gameState.decks.value.pop();
+        const card = dealCard('value');
+        if (!card) {
+            console.error("Failed to draw card for initial draw.");
+            return;
+        }
         drawnCards[id] = card;
         const cardEl = document.getElementById(`draw-card-${id}`);
         
@@ -474,8 +509,7 @@ async function drawToStart() {
     } else {
         dom.drawStartResultMessage.textContent = "Empate! Sorteando novamente...";
         updateLog("Empate! Sacando novas cartas...");
-        Object.values(drawnCards).forEach(card => gameState.decks.value.push(card));
-        gameState.decks.value = shuffle(gameState.decks.value);
+        Object.values(drawnCards).forEach(card => gameState.discardPiles.value.push(card));
         await initiateGameStartSequence();
     }
 };
@@ -674,7 +708,7 @@ export async function playCard(player, card, targetId, effectTypeToReverse = nul
             targetSlotType = 'score';
         } else if (['Sobe', 'Desce', 'Pula'].includes(cardToPlaceInSlot.name) || (cardToPlaceInSlot.name === 'Reversus' && cardToPlaceInSlot.reversedEffectType === 'movement')) {
             targetSlotType = 'movement';
-        } else if (cardToPlaceInSlot.name === 'Reversus Total' && !options.isIndividualLock) {
+        } else if (cardToPlaceInSlot.name === 'Reversus Total' && !cardToPlaceInSlot.isLocked) {
              targetSlotType = 'reversus-total';
         }
 
@@ -692,10 +726,10 @@ export async function playCard(player, card, targetId, effectTypeToReverse = nul
                 oldCardIndex = currentEffects.findIndex(c => c.name === 'Reversus Total' && !c.isLocked);
             }
 
-            // Remove it if found
+            // Remove it if found and add to discard pile
             if (oldCardIndex !== -1) {
                 const [oldCard] = currentEffects.splice(oldCardIndex, 1);
-                gameState.decks.effect.push(oldCard); // Return to deck
+                gameState.discardPiles.effect.push(oldCard);
             }
         }
         
@@ -780,6 +814,13 @@ export async function executeAiTurn(player) {
     await new Promise(res => setTimeout(res, 1000 + Math.random() * 1500));
     await tryToSpeak(player);
 
+    // Special ability check for Necroverso Final
+    if (player.aiType === 'necroverso_final' && !gameState.necroXUsedThisRound && Math.random() < 0.5) {
+        await triggerNecroX(player);
+        await advanceToNextPlayer();
+        return;
+    }
+
     let move;
     try {
         move = await getGeminiAiMove(player, gameState);
@@ -839,8 +880,10 @@ async function startNewRound(isFirstRound = false) {
     }
 
 
-    // Reset players for the new round
+    // Reset players for the new round and return cards to discard piles
     Object.values(gameState.players).forEach(player => {
+        gameState.discardPiles.value.push(...player.playedCards.value);
+        gameState.discardPiles.effect.push(...player.playedCards.effect);
         player.playedCards = { value: [], effect: [] };
         player.playedValueCardThisTurn = false;
         player.effects = { score: null, movement: null };
@@ -853,18 +896,18 @@ async function startNewRound(isFirstRound = false) {
     // Deal cards
     Object.values(gameState.players).forEach(player => {
         while (player.hand.filter(c => c.type === 'value').length < config.MAX_VALUE_CARDS_IN_HAND) {
-            if (gameState.decks.value.length === 0) break;
-            player.hand.push(gameState.decks.value.pop());
+            const card = dealCard('value');
+            if (card) player.hand.push(card);
+            else break;
         }
         while (player.hand.filter(c => c.type === 'effect').length < config.MAX_EFFECT_CARDS_IN_HAND) {
-            if (gameState.decks.effect.length === 0) break;
-            player.hand.push(gameState.decks.effect.pop());
+            const card = dealCard('effect');
+            if (card) player.hand.push(card);
+            else break;
         }
     });
 
-    if (gameState.currentStoryBattle === 'tutorial_necroverso' && isFirstRound) {
-        gameState.tutorialEffectCardsLocked = true;
-    }
+    gameState.tutorialEffectCardsLocked = false;
     
     updateState('roundStartStateSnapshot', structuredClone(gameState));
     renderAll();
@@ -1113,4 +1156,46 @@ export function setupPvpRooms() {
         };
     });
     updateState('pvpRooms', rooms);
+}
+
+/**
+ * Restores the game state from a pre-challenge snapshot.
+ */
+export function resumeGameFromSnapshot() {
+    const snapshot = getState().preChallengeGameStateSnapshot;
+    if (!snapshot) {
+        console.error("Não foi possível restaurar o jogo: nenhum snapshot encontrado.");
+        showSplashScreen();
+        return;
+    }
+
+    // Restore the main game state
+    updateState('gameState', snapshot);
+    updateState('preChallengeGameStateSnapshot', null); // Clear the snapshot after using it
+
+    const { gameState, gameTimerInterval } = getState();
+    if (gameTimerInterval) clearInterval(gameTimerInterval);
+    
+    // Restore timer state
+    const elapsedSeconds = snapshot.elapsedSeconds || 0;
+    const newStartTime = Date.now() - (elapsedSeconds * 1000);
+    updateState('gameStartTime', newStartTime);
+    updateGameTimer();
+    updateState('gameTimerInterval', setInterval(updateGameTimer, 1000));
+    
+    // BUG FIX: Hide the game over modal before restoring the game screen
+    dom.gameOverModal.classList.add('hidden');
+    
+    dom.appContainerEl.classList.remove('hidden');
+    dom.debugButton.classList.remove('hidden');
+
+    // Re-create the player area divs to ensure clean state
+    const player1Container = document.getElementById('player-1-area-container');
+    const opponentsContainer = document.getElementById('opponent-zones-container');
+    const createPlayerAreaHTML = (id) => `<div class="player-area" id="player-area-${id}"></div>`;
+    player1Container.innerHTML = createPlayerAreaHTML('player-1');
+    opponentsContainer.innerHTML = gameState.playerIdsInGame.filter(id => id !== 'player-1').map(id => createPlayerAreaHTML(id)).join('');
+
+    renderAll();
+    updateLog("Retornando ao jogo anterior...");
 }

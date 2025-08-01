@@ -1,6 +1,4 @@
 
-
-
 import { getState, updateState } from './state.js';
 import * as config from './config.js';
 import * as dom from './dom.js';
@@ -36,7 +34,7 @@ export async function triggerNecroX(caster) {
     const oldScoreCardIndex = caster.playedCards.effect.findIndex(c => scoreEffectCategory.includes(c.name));
     if (oldScoreCardIndex > -1) {
         const [oldCard] = caster.playedCards.effect.splice(oldScoreCardIndex, 1);
-        gameState.decks.effect.push(oldCard);
+        gameState.discardPiles.effect.push(oldCard);
     }
     caster.playedCards.effect.push(necroXCard);
     applyEffect(necroXCard, caster.id, caster.name);
@@ -337,13 +335,23 @@ export async function triggerFieldEffects() {
             const allPlayers = Object.values(gameState.players);
             
             const handleCardDraw = (p, preferHigh) => {
-                const valueCards = p.hand.filter(c => c.type === 'value').sort((a,b) => a.value - b.value);
+                const valueCards = p.hand.filter(c => c.type === 'value').sort((a, b) => a.value - b.value);
                 if (valueCards.length === 0) return;
-                const cardToDiscard = preferHigh ? valueCards[valueCards.length-1] : valueCards[0];
-                p.hand = p.hand.filter(c => c.id !== cardToDiscard.id);
-                if(gameState.decks.value.length > 0) p.hand.push(gameState.decks.value.pop());
+
+                const cardToDiscard = preferHigh ? valueCards[valueCards.length - 1] : valueCards[0];
+                const cardIndex = p.hand.findIndex(c => c.id === cardToDiscard.id);
+
+                if (cardIndex > -1) {
+                    const [discarded] = p.hand.splice(cardIndex, 1);
+                    gameState.discardPiles.value.push(discarded);
+                }
+                
+                const newCard = gameState.decks.value.pop();
+                if (newCard) p.hand.push(newCard);
+                
                 updateLog(`${p.name} descartou a carta ${cardToDiscard.name} e comprou uma nova.`);
             };
+
 
             switch (effectName) {
                 case 'Reversus Total':
@@ -388,26 +396,35 @@ export async function triggerFieldEffects() {
                     if (gameState.gameMode === 'duo') {
                         const playerWithEffect = gameState.players[playerId];
                         const partner = gameState.players[appliesTo.find(id => id !== playerId)];
+                        
                         // Discard one random effect card from activator
                         const effectCards = playerWithEffect.hand.filter(c => c.type === 'effect');
                         if (effectCards.length > 0) {
                             const cardToDiscard = shuffle(effectCards)[0];
-                            playerWithEffect.hand = playerWithEffect.hand.filter(c => c.id !== cardToDiscard.id);
+                            const cardIndex = playerWithEffect.hand.findIndex(c => c.id === cardToDiscard.id);
+                            if (cardIndex > -1) {
+                                const [discarded] = playerWithEffect.hand.splice(cardIndex, 1);
+                                gameState.discardPiles.effect.push(discarded);
+                            }
                         }
                         // Partner discards until 1 effect card is left
                         if (partner) {
-                            const partnerEffectCards = partner.hand.filter(c => c.type === 'effect');
                             while(partner.hand.filter(c=>c.type === 'effect').length > 1) {
-                                const cardToDiscard = partner.hand.find(c => c.type === 'effect');
-                                if(cardToDiscard) partner.hand = partner.hand.filter(c => c.id !== cardToDiscard.id);
+                                const cardIndexToDiscard = partner.hand.findIndex(c => c.type === 'effect');
+                                if (cardIndexToDiscard > -1) {
+                                    const [discarded] = partner.hand.splice(cardIndexToDiscard, 1);
+                                    gameState.discardPiles.effect.push(discarded);
+                                } else {
+                                    break; // Safety break
+                                }
                             }
                         }
                     } else {
                          // Solo mode
                         const playerWithEffect = gameState.players[playerId];
-                        const effectCards = playerWithEffect.hand.filter(c => c.type === 'effect');
+                        const effectCardsToDiscard = playerWithEffect.hand.filter(c => c.type === 'effect');
                         playerWithEffect.hand = playerWithEffect.hand.filter(c => c.type !== 'effect');
-                        gameState.decks.effect.push(...effectCards);
+                        gameState.discardPiles.effect.push(...effectCardsToDiscard);
                     }
                     updateLog(`Efeito de '${effectName}' fez jogadores descartarem cartas de efeito.`);
                     break;

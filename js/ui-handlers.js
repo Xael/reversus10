@@ -1,5 +1,7 @@
 
 
+
+
 import * as dom from './dom.js';
 import { getState, updateState } from './state.js';
 import * as game from './game.js';
@@ -250,12 +252,17 @@ export function initializeUiHandlers() {
     });
 
     dom.playButton.addEventListener('click', async () => {
+        // Disable button immediately to prevent multiple clicks
+        dom.playButton.disabled = true;
+
         const { gameState } = getState();
         const card = gameState.selectedCard;
-        if (!card) return;
+        if (!card) return; // Should not happen as button is disabled, but good guard clause.
 
         if (card.name === 'Reversus Total') {
             dom.reversusTotalChoiceModal.classList.remove('hidden');
+            // Re-enable button if user cancels the modal
+            dom.playButton.disabled = false;
             return;
         }
 
@@ -277,22 +284,15 @@ export function initializeUiHandlers() {
     });
     
     dom.endTurnButton.addEventListener('click', game.advanceToNextPlayer);
+    
     dom.restartButton.addEventListener('click', () => {
         const { gameState } = getState();
-        if (gameState && gameState.isXaelChallenge) {
-            // If it was a Xael challenge, restore the pre-challenge state
-            const snapshot = getState().preChallengeGameStateSnapshot;
-            if (snapshot) {
-                updateState('gameState', snapshot);
-                updateState('preChallengeGameStateSnapshot', null);
-                dom.gameOverModal.classList.add('hidden');
-                dom.appContainerEl.classList.remove('hidden');
-                ui.renderAll();
-                game.resumeGameFromSnapshot();
-            } else {
-                ui.showSplashScreen();
-            }
+        if (gameState?.isXaelChallenge) {
+            // The resumeGameFromSnapshot function now handles all the logic
+            // for restoring the state and hiding the modal.
+            game.resumeGameFromSnapshot();
         } else {
+            // For all other game modes, simply return to the splash screen.
             ui.showSplashScreen();
         }
     });
@@ -488,6 +488,7 @@ export function initializeUiHandlers() {
         let isNarradorChallenge = false;
         let isInversusChallenge = false;
         let isXaelChallenge = false;
+        let isNecroFinalChallenge = false;
         
         ['p2', 'p3', 'p4'].forEach(playerPrefix => {
             const selectEl = document.getElementById(`lobby-ai-${playerPrefix}`);
@@ -498,6 +499,7 @@ export function initializeUiHandlers() {
                 if (aiType === 'narrador') isNarradorChallenge = true;
                 if (aiType === 'inversus') isInversusChallenge = true;
                 if (aiType === 'xael') isXaelChallenge = true;
+                if (aiType === 'necroverso_final') isNecroFinalChallenge = true;
 
                 if (aiType !== 'default') {
                     overrides[playerId] = { aiType: aiType, name: selectEl.options[selectEl.selectedIndex].text };
@@ -527,6 +529,20 @@ export function initializeUiHandlers() {
                     playerIds: ['player-1', 'player-2'], 
                     overrides: { 'player-2': { name: 'Xael', aiType: 'xael' } }
                 } 
+            });
+        } else if (isNecroFinalChallenge) {
+            // Force the exact 2v2 Story Mode configuration for the Final Battle
+            await game.initializeGame('duo', {
+                story: {
+                    battle: 'necroverso_final',
+                    type: '2v2_necro_final',
+                    playerIds: ['player-1', 'player-4', 'player-2', 'player-3'],
+                    overrides: {
+                        'player-2': { name: 'Necroverso Final', aiType: 'necroverso_final' },
+                        'player-3': { name: 'Necroverso Final', aiType: 'necroverso_final' },
+                        'player-4': { name: 'Versatrix', aiType: 'versatrix' }
+                    }
+                }
             });
         } else {
             await game.initializeGame(gameMode, { numPlayers, overrides });
@@ -611,7 +627,7 @@ export function initializeUiHandlers() {
     dom.closeAchievementsButton.addEventListener('click', () => dom.achievementsModal.classList.add('hidden'));
 
     // Xael Challenge Handlers
-    dom.xaelPopup.addEventListener('click', () => {
+    dom.xaelPopup.addEventListener('click', async () => {
         const { gameState } = getState();
         if (dom.xaelPopup.classList.contains('hidden') || !gameState) return;
         
@@ -625,12 +641,19 @@ export function initializeUiHandlers() {
         dom.xaelPopup.classList.add('hidden');
         
         // Start the challenge with correct story setup
-        game.initializeGame('solo', { 
+        await game.initializeGame('solo', { 
             story: { 
                 battle: 'xael_challenge', 
                 playerIds: ['player-1', 'player-2'], 
                 overrides: { 'player-2': { name: 'Xael', aiType: 'xael' } }
             } 
+        });
+
+        // Add explanation after game is initialized and log is cleared
+        updateLog({
+            type: 'dialogue',
+            speaker: 'xael',
+            message: 'Xael: "Você me desafiou e agora quero ver vencer! Não bastará chegar ao centro, vencerá no final quem tiver mais estrelas ;)"'
         });
     });
 
@@ -649,6 +672,55 @@ export function initializeUiHandlers() {
         }
     });
 
+    // Chat Handlers
+    const handleChatSubmit = async () => {
+        const { gameState } = getState();
+        const userInput = dom.chatInput.value.trim();
+
+        if (!userInput || !gameState) return;
+
+        // Disable input while processing
+        dom.chatInput.disabled = true;
+        dom.chatSendButton.disabled = true;
+        
+        // Display user's message
+        updateLog({
+            type: 'dialogue',
+            speaker: 'player-1',
+            message: `Você: "${userInput}"`
+        });
+        dom.chatInput.value = '';
+
+        // Determine opponent to talk to (simple logic: first non-human opponent)
+        const opponent = Object.values(gameState.players).find(p => !p.isHuman);
+        
+        if (opponent) {
+            try {
+                const { getAiChatResponse } = await import('./gemini-ai.js');
+                const aiResponse = await getAiChatResponse(userInput, opponent.id);
+                updateLog({
+                    type: 'dialogue',
+                    speaker: opponent.aiType,
+                    message: `${opponent.name}: "${aiResponse}"`
+                });
+            } catch (e) {
+                console.error("Chat AI failed:", e);
+                updateLog(`[Sistema] A I.A. do oponente não conseguiu responder. Tente novamente.`);
+            }
+        }
+
+        // Re-enable input
+        dom.chatInput.disabled = false;
+        dom.chatSendButton.disabled = false;
+        dom.chatInput.focus();
+    };
+
+    dom.chatSendButton.addEventListener('click', handleChatSubmit);
+    dom.chatInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            handleChatSubmit();
+        }
+    });
 
     // Custom Events
     document.addEventListener('startStoryGame', (e) => {
@@ -703,84 +775,65 @@ export function initializeUiHandlers() {
                 break;
             case 'contravox':
                  portrait = document.querySelector('#player-area-player-3 .player-area-character-portrait');
-                 if (portrait) {
-                     await shatterImage(portrait);
-                     await new Promise(res => setTimeout(res, 2000)); // Wait after shatter
-                 }
-                 ui.showGameOver("!otiderca oãN", "Você Venceu!", false);
+                 if (portrait) await shatterImage(portrait);
+                 ui.showGameOver("!odatorreD .otiderca oãN", "Você Venceu!", false);
                  achievements.grantAchievement('contravox_win');
                  nextNodeId = 'post_contravox_victory';
                  break;
             case 'versatrix':
                 if (won) {
                     portrait = document.querySelector('#player-area-player-4 .player-area-character-portrait');
-                    if (portrait) {
-                        await shatterImage(portrait);
-                        await new Promise(res => setTimeout(res, 2000)); // Wait after shatter
-                    }
-                }
-                ui.showGameOver(won ? "Eu pensei... que você era diferente..." : "Obrigada por me deixar vencer...", won ? "Você Venceu!" : "Você Perdeu!", false);
-                if(won) {
+                    if (portrait) await shatterImage(portrait);
+                    ui.showGameOver("Obrigada por me vencer... você é diferente", "Você Venceu!", false);
                     achievements.grantAchievement('versatrix_win');
+                    nextNodeId = 'post_versatrix_victory';
                 } else {
+                    ui.showGameOver("Eu avisei...", "Você Perdeu!", false);
                     achievements.grantAchievement('versatrix_loss');
                     storyState.lostToVersatrix = true;
+                    nextNodeId = 'post_versatrix_defeat';
                 }
-                nextNodeId = won ? 'post_versatrix_victory' : 'post_versatrix_defeat';
                 break;
             case 'reversum':
-                 portrait = document.querySelector('#player-area-player-2 .player-area-character-portrait');
-                 if (portrait) {
-                     await shatterImage(portrait);
-                     await new Promise(res => setTimeout(res, 2000)); // Wait after shatter
-                 }
-                 ui.showGameOver("...INTERESSANTE", "Você Venceu!", false);
-                 achievements.grantAchievement('reversum_win');
-                 nextNodeId = 'post_reversum_victory';
-                 break;
-            case 'necroverso_king':
-                if (won) {
-                    ui.showGameOver("Você os derrotou, mas a verdadeira ameaça se revela...", "Vitória Parcial", false);
-                    achievements.grantAchievement('true_end_beta');
-                    nextNodeId = 'post_necroverso_king_victory';
-                }
-                // Loss is handled by the hard fail check
+                portrait = document.querySelector('#player-area-player-2 .player-area-character-portrait');
+                if (portrait) await shatterImage(portrait);
+                ui.showGameOver("EU NÃO POSSO PERDER!", "Você Venceu!", false);
+                achievements.grantAchievement('reversum_win');
+                nextNodeId = 'post_reversum_victory';
                 break;
-            case 'necroverso_final':
-                if (won) {
-                    ui.showGameOver("Você salvou o Inversus!", "VITÓRIA FINAL!", false);
-                    achievements.grantAchievement('true_end_final');
-                    setTimeout(story.playEndgameSequence, 2000);
-                }
-                return; // Exit here, no nextNodeId logic needed
+            case 'necroverso_king':
+                // The win is handled by elimination, this is the victory dialogue trigger
+                ui.showGameOver("Você libertou os reis... mas não a si mesmo.", "Vitória...?", false);
+                achievements.grantAchievement('true_end_beta');
+                nextNodeId = 'post_necroverso_king_victory';
+                break;
+             case 'necroverso_final':
+                ui.showGameOver("Parabéns... você conseguiu.", "FINAL FINAL", false);
+                achievements.grantAchievement('true_end_final');
+                story.playEndgameSequence();
+                return; // End of story
             case 'narrador':
-                if (won) {
-                     ui.showGameOver("Impossível... meus cálculos...", "Vitória!", false);
-                     // No achievement for narrator win, it's just a secret fight.
-                     setTimeout(() => {
-                        dom.gameOverModal.classList.add('hidden');
-                        ui.showSplashScreen();
-                     }, 3000);
-                }
+                ui.showGameOver("...Fim de Jogo...", "Fim de Jogo.", false);
+                // No progression from here yet
+                 setTimeout(() => {
+                    dom.gameOverModal.classList.add('hidden');
+                    ui.showSplashScreen();
+                }, 3000);
                 return;
             case 'xael_challenge':
-                if (won) {
-                    ui.showGameOver("Você conseguiu... por agora.", "Desafio Vencido!", false);
-                    setTimeout(() => {
-                        dom.restartButton.click(); // This will restore the pre-challenge snapshot
-                    }, 3000);
-                }
-                return;
+                const winMsg = "Você provou ser um verdadeiro mestre de Reversus!";
+                const loseMsg = "Heh, você ainda tem muito a aprender.";
+                ui.showGameOver(won ? winMsg : loseMsg, won ? "Você Venceu!" : "Você Perdeu!", true); // Show restart
+                return; // Restart will handle going back to pre-challenge state
         }
     
         if (nextNodeId) {
-            document.body.dataset.storyContinuation = 'true';
             setTimeout(() => {
                 dom.gameOverModal.classList.add('hidden');
-                story.renderStoryNode(nextNodeId);
                 dom.storyModeModalEl.classList.remove('hidden');
-                document.body.dataset.storyContinuation = 'false';
+                story.renderStoryNode(nextNodeId);
             }, 3000);
         }
     });
+
 }

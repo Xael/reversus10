@@ -163,3 +163,8 @@ export const splashLogo = document.getElementById('splash-logo');
 export const cosmicGlowOverlay = document.getElementById('cosmic-glow-overlay');
 export const xaelPopup = document.getElementById('xael-popup');
 export const xaelStarPowerButton = document.getElementById('xael-star-power');
+
+// Chat
+export const chatInputArea = document.getElementById('chat-input-area');
+export const chatInput = document.getElementById('chat-input');
+export const chatSendButton = document.getElementById('chat-send-button');

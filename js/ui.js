@@ -1,9 +1,4 @@
 
-
-
-
-
-
 import * as dom from './dom.js';
 import * as config from './config.js';
 import { getState, updateState } from './state.js';
@@ -149,10 +144,11 @@ export const renderPlayerArea = (player) => {
     const specialPortraits = {
         'necroverso_tutorial': { src: 'necroverso.png', class: '' },
         'contravox': { src: 'contravox.png', class: 'contravox-portrait' },
-        'versatrix': { src: 'versatrix.png', class: '' },
-        'reversum': { src: 'reversum.png', class: '' },
+        'versatrix': { src: 'versatrix.png', class: 'versatrix-portrait' },
+        'reversum': { src: 'reversum.png', class: 'reversum-portrait' },
         'narrador': { src: 'narrador.png', class: 'effect-glitch' },
         'xael': { src: 'xaeldesafio.png', class: 'xael-glow' },
+        'necroverso_final': { src: 'necroversorevelado.png', class: 'final-boss-glow' },
     };
 
     if (gameState.isInversusMode && player.aiType === 'inversus') {
@@ -400,7 +396,7 @@ export const updateTurnIndicator = () => {
     let turnText;
     
     if(player.isHuman){
-        turnText = `Sua vez`;
+        turnText = `SUA VEZ!`;
     } else {
         turnText = `Vez de: ${player.name}`;
     }
@@ -518,6 +514,9 @@ export const showGameOver = (message, title = "Fim de Jogo!", showRestart = true
     
     if (gameState?.isXaelChallenge) {
         dom.cosmicGlowOverlay.classList.add('hidden');
+        dom.restartButton.textContent = "Voltar ao Jogo";
+    } else {
+        dom.restartButton.textContent = "Jogar Novamente";
     }
 
     dom.gameOverTitle.textContent = title;

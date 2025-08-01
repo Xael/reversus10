@@ -42,6 +42,9 @@ export const playSoundEffect = (effectName) => {
     if (loudEffects.includes(effectName.toLowerCase().replace(/\s/g, ''))) {
         volume = Math.min(1.0, soundState.volume * 1.5); // Boost volume for specific effects
     }
+    if (effectName === 'xael') {
+        volume = Math.min(1.0, soundState.volume * 2.0); // Increase volume by 100%
+    }
     player.volume = volume;
     player.play().catch(e => console.error(`Failed to play sound effect: ${sfxSrc}`, e));
 };

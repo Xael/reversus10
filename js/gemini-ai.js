@@ -2,6 +2,7 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 import * as config from './config.js';
+import { getState } from './state.js';
 
 let ai;
 
@@ -151,5 +152,42 @@ export async function getGeminiAiMove(player, gameState) {
         console.error("Error getting Gemini AI move:", error);
         // This error will be caught by the fallback logic in game.js
         throw error; 
+    }
+}
+
+export async function getAiChatResponse(userInput, aiPlayerId) {
+    const genAI = getAiInstance();
+    const { gameState } = getState();
+    const aiPlayer = gameState.players[aiPlayerId];
+    if (!aiPlayer) {
+        return "..."; // Fallback if AI not found
+    }
+
+    const persona = config.AI_CHAT_PERSONALITIES[aiPlayer.aiType] || config.AI_CHAT_PERSONALITIES['default'];
+    const systemInstruction = persona.systemInstruction;
+    
+    const prompt = `The user, who is your opponent in the card game Reversus, said to you: "${userInput}"
+    
+    Respond to the user based on your personality. Keep your response to one or two short sentences.`;
+
+    try {
+        const response = await genAI.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                systemInstruction: systemInstruction,
+                temperature: 0.9,
+            }
+        });
+
+        const text = response.text;
+        // The AI might enclose its response in quotes, let's remove them for cleaner display.
+        return text.trim().replace(/^"|"$/g, '');
+
+    } catch (error) {
+        console.error("Error getting Gemini AI chat response:", error);
+        // Throw the error to be handled by the UI layer, which is better practice
+        // than returning a canned response.
+        throw error;
     }
 }
